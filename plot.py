@@ -2,6 +2,7 @@ import argparse
 import pickle
 import sys
 from sailfish.physics.kepler import OrbitalState
+import matplotlib.pyplot as plt
 
 sys.path.insert(1,"/groups/astro/davidon/sailfish/")
 import sailfish
@@ -23,7 +24,6 @@ def load_checkpoint(filename, require_solver=None):
 
 
 def main_srhd_1d():
-    import matplotlib.pyplot as plt
     from sailfish.mesh import LogSphericalMesh
 
     parser = argparse.ArgumentParser()
@@ -53,7 +53,6 @@ def main_srhd_1d():
 
 
 def main_srhd_2d():
-    import matplotlib.pyplot as plt
     import numpy as np
     import sailfish
 
@@ -145,7 +144,6 @@ def main_srhd_2d():
 
 
 def main_cbdiso_2d():
-    import matplotlib.pyplot as plt
     import numpy as np
 
     fields = {
@@ -363,10 +361,6 @@ def main_cbdiso_2d():
             plt.xlim([-2,2])
             pngname     = os.getcwd() + f"{'/Outputs/VelocityCuts'}.{int(np.round(100*CurrentTime,3)):04d}.png"
             fig.savefig(pngname, dpi=400)
-
-
-
-
 
 
             x, y        = self.Mesh()
@@ -590,11 +584,7 @@ def main_cbdiso_2d():
             sigma = fields['sigma'](prim).T
             f     = sigma * Velocities.Pressure()
             #f     = Velocities.Pressure()
-            
-        elif args.field == 'pressure':
-            sigma = fields['sigma'](prim).T
-            f     = sigma * Velocities.Pressure()
-            #f     = Velocities.Pressure()
+
         elif args.field == 'vortensity':
             sigma = fields['sigma'](prim).T
             f     = Velocities.Vortensity()/sigma
@@ -612,11 +602,6 @@ def main_cbdiso_2d():
             sys.exit()
 
         else:
-            #if args.CorotatingFrame:
-            #    #xprim = chkpt['point']
-            #    #yprim = 
-            #    f = fields[args.field](prim).T[]
-            #else:
             f = fields[args.field](prim).T
 
 
@@ -779,8 +764,8 @@ def main_cbdisodg_2d():
     main_cbdiso_2d()
 
 
+
 def main_cbdgam_2d():
-    import matplotlib.pyplot as plt
     import numpy as np
 
     fields = {
@@ -790,6 +775,8 @@ def main_cbdgam_2d():
         "pre": lambda p: p[:, :, 3],
     }
 
+
+
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoints", type=str, nargs="+")
     parser.add_argument(
@@ -797,9 +784,9 @@ def main_cbdgam_2d():
         "-f",
         type=str,
         default="sigma",
-        choices=fields.keys(),
         help="which field to plot",
     )
+    parser.add_argument("--poly", type=int, nargs=2, default=None)
     parser.add_argument(
         "--log",
         "-l",
@@ -819,43 +806,151 @@ def main_cbdgam_2d():
         type=float,
         help="maximum value for colormap",
     )
+    parser.add_argument(
+        "--radius",
+        default=None,
+        type=float,
+        help="plot the domain out to this radius",
+    )
+    parser.add_argument(
+        "--Outputs",
+        "-o",
+        default=None,
+        type=str,
+        help="Where to save the output png files",
+    )
+    parser.add_argument(
+        "--print_model_parameters",
+        "-params",
+        action="store_true",
+        help="plot the parameters used for making this checkpoint",
+    )
+    parser.add_argument(
+        "--plot_sink",
+        action="store_true",
+        help="plot the sink properties",
+    )
+    parser.add_argument(
+        "--cmap",
+        default="magma",
+        help="colormap name",
+    )
+    #parser.add_argument(
+    #    "--AngularSpeed",
+    #    action="store_true",
+    #    help="plot the orbital speed of a minidisk",
+    #)
+    #parser.add_argument(
+    #   "--pressure",
+    #    action="store_true",
+    #    help="plot the orbital speed of a minidisk",
+    #)
+    #    parser.add_argument(
+    #    "--CorotatingFrame",
+    #    "-cf",
+    #    action="store_true",
+    #    default=False,
+    #    help="plot velocity vectors",
+    #)
+
+    #fig, ax = plt.subplots(figsize=(column_width, column_width))
 
     args = parser.parse_args()
 
     for filename in args.checkpoints:
-        fig, ax = plt.subplots(figsize=[10, 10])
-        chkpt = load_checkpoint(filename, require_solver="cbdgam_2d")
-        mesh = chkpt["mesh"]
-        prim = chkpt["solution"]
-        f = fields[args.field](prim).T
+        fig, ax     = plt.subplots(figsize=[10, 10])
+        chkpt       = load_checkpoint(filename, require_solver="cbdgam_2d")
+        CurrentTime = chkpt["time"]/ 2 / np.pi
+        mesh        = chkpt["mesh"]
+        prim        = chkpt["solution"]
+        f           = fields[args.field](prim).T
 
         if args.log:
             f = np.log10(f)
 
         extent = mesh.x0, mesh.x1, mesh.y0, mesh.y1
+
+
         cm = ax.imshow(
             f,
             origin="lower",
             vmin=args.vmin,
             vmax=args.vmax,
-            cmap="magma",
+            cmap=args.cmap,
             extent=extent,
         )
-        ax.set_aspect("equal")
         fig.colorbar(cm)
-        fig.suptitle(filename)
+        ax.tick_params(axis='x', labelsize=16)
+        ax.tick_params(axis='y', labelsize=16)
 
-    plt.show()
+        ax.set_aspect("equal")
+        fig.suptitle(chkpt["time"]/2/np.pi)
+
+        fig.subplots_adjust(
+        left=0.05, right=0.95, bottom=0.05, top=0.95, hspace=0, wspace=0
+        )
+
+    if args.radius is not None:
+            ax.set_xlim(-args.radius, args.radius)
+            ax.set_ylim(-args.radius, args.radius)
+
+    if args.print_model_parameters:
+            print('Iteration Number.........',chkpt['iteration'])
+            print('Timestep_dt..............',chkpt['timestep_dt'])
+            print('cfl_number...............',chkpt['cfl_number'])
+            print('Solver options...........',chkpt['solver_options'])
+            print('Event states.............',chkpt['event_states'])
+
+            print('------------------Driver------------------')
+            print(chkpt['driver'])
+            print('-------------Model Parameters-------------')
+            print(chkpt["model_parameters"])
+            print('---------------Point Masses---------------')
+            print(chkpt["point_masses"])
+            print('------------------------------------------')
+
+    if args.plot_sink:
+        primary, secondary = chkpt['point_masses']
+
+        ax.scatter(primary.position_x, primary.position_y, marker = '+', s = 40, c = 'white', label = 'Point Mass')
+        ax.scatter(secondary.position_x, secondary.position_y, marker = '+', s = 40, c = 'white')
+
+        from matplotlib.patches import Circle
+        primarycenter   = (primary.position_x, primary.position_y)
+        secondarycenter = (secondary.position_x, secondary.position_y)
+        radius          = primary.sink_radius         # Radius of the circle
+
+        primarysink   = Circle(primarycenter, radius, color='white', fill=True, alpha=0.7)
+        secondarysink = Circle(secondarycenter, radius, color='white', fill=True, alpha=0.7)
+        ax.add_patch(primarysink)
+        ax.add_patch(secondarysink)
+
+    if args.Outputs is None:
+        plt.show()
+    else:
+        pngname     = args.Outputs + f"{'/DensityMap'}.{int(100*CurrentTime)}.png"
+        fig.savefig(pngname, dpi=400)
+
+
+text_width   = 7.1
+column_width = text_width / 2.
+def configure_matplotlib():
+    plt.rc('xtick' , labelsize=8)
+    plt.rc('ytick' , labelsize=8)
+    plt.rc('axes'  , labelsize=8)
+    plt.rc('legend', fontsize=8)
+    plt.rc('font', family='DejaVu Sans', size=8)
+    plt.rc('text', usetex=True)
+configure_matplotlib()
 
 if __name__ == "__main__":
     for arg in sys.argv:
         if arg.endswith(".pk"):
             chkpt = load_checkpoint(arg)
             
-            #prim, sec = chkpt['point_masses']
             import numpy as np
             print('Time',chkpt['time']/2/np.pi)
-            #print('Semi-Major axis',np.array([s[ 1] for s in chkpt['timeseries']])[-1])
+            
             if chkpt["solver"] == "srhd_1d":
                 print("plotting for srhd_1d solver")
                 exit(main_srhd_1d())

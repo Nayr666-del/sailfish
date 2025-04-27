@@ -23,35 +23,31 @@ class DavidTimeseries:
         Checkpoint = load_checkpoint(chkpt)
         ts = Checkpoint['timeseries']
 
-        self.pointmasses    = Checkpoint["point_masses"]
-        self.currenttime    = Checkpoint["time"] / 2 / np.pi 
-        self.modelparams    = Checkpoint['model_parameters'] 
-        self.time           = np.array([s[ 0] for s in ts])
-        self.semimajor_axis = np.array([s[ 1] for s in ts])
-        self.eccentricity   = np.array([s[ 2] for s in ts])
-        self.mdot1          = np.array([s[ 3] for s in ts])
-        self.mdot2          = np.array([s[ 4] for s in ts])
-        self.torque_g       = np.array([s[ 5] for s in ts])
-        self.torque_a       = np.array([s[ 6] for s in ts])
-        self.jdisk          = np.array([s[ 7] for s in ts])
-        self.torque_b       = np.array([s[ 8] for s in ts])
-        self.mdot_b         = np.array([s[ 9] for s in ts])
-        self.disk_ecc       = np.array([s[10] for s in ts])
-        #self.Inspiral_Times = Checkpoint["model_parameters"]["inspiral_time_list"]
-        #self.Orbital_Phase  = Checkpoint["model_parameters"]["Fixed_Phases"]
+        self.pointmasses     = Checkpoint["point_masses"]
+        self.currenttime     = Checkpoint["time"] / 2 / np.pi 
+        self.modelparams     = Checkpoint['model_parameters'] 
+        self.time            = np.array([s[ 0] for s in ts])
+        self.semimajor_axis  = np.array([s[ 1] for s in ts])
+        self.eccentricity    = np.array([s[ 2] for s in ts])
+        self.energy          = np.array([s[ 3] for s in ts])
+        self.Accreted_energy = np.array([s[ 4] for s in ts])
 
+        self.optical         = np.array([s[ 5] for s in ts])
+        self.infared         = np.array([s[ 6] for s in ts])
 
-        if Checkpoint["model_parameters"]["which_diagnostics"] == "david_new":
-            self.innertorque    = np.array([s[11] for s in ts])
-            self.outertorque    = np.array([s[12] for s in ts])
-            self.power_g1       = np.array([s[13] for s in ts])
-            self.power_a1       = np.array([s[14] for s in ts])
-            self.power_g2       = np.array([s[15] for s in ts])
-            self.power_a2       = np.array([s[16] for s in ts])
-            self.innerpower_1   = np.array([s[17] for s in ts])
-            self.outerpower_1   = np.array([s[18] for s in ts])
-            self.innerpower_2   = np.array([s[19] for s in ts])
-            self.outerpower_2   = np.array([s[20] for s in ts])
+        self.mdot1           = np.array([s[ 7] for s in ts])
+        self.mdot2           = np.array([s[ 8] for s in ts])
+        self.torque_g        = np.array([s[ 9] for s in ts])
+        self.torque_a        = np.array([s[10] for s in ts])
+        self.power_g1        = np.array([s[11] for s in ts])
+        self.power_g2        = np.array([s[12] for s in ts])
+        self.power_a1        = np.array([s[13] for s in ts])
+        self.power_a2        = np.array([s[14] for s in ts])
+        self.jdisk           = np.array([s[15] for s in ts])
+
+        
+
+            
 
     @property
     def dt(self):
@@ -125,6 +121,24 @@ if __name__ == '__main__':
         action='store_true',
         help="whether to plot the power exerted on the binary",
     )
+    parser.add_argument(
+        "--Accreted_Energy",
+        "-ae",
+        action='store_true',
+        help="whether to plot the energy of the gas accreted by the binary",
+    )
+    parser.add_argument(
+        "--Energy",
+        "-e",
+        action='store_true',
+        help="whether to plot the energy emmitted by the disk",
+    )
+    parser.add_argument(
+        "--Lightcurves",
+        "-lc",
+        action='store_true',
+        help="whether to plot the optical and infared luminosities of the disk",
+    )
     args = parser.parse_args()
     
 
@@ -144,11 +158,23 @@ if __name__ == '__main__':
 
     hist, edges         = np.histogram(Final_Orbits, bins=int(Number_of_Orbits))
     CumulativeTimeBin   = np.cumsum(hist)
-    viscosity           = Model_Parameters["nu"]
-    Sigma_0             = Model_Parameters["initial_sigma"]
-    M_dot_0             = -3 * np.pi * viscosity * Sigma_0
+    alpha               = Model_Parameters["alpha"]
+    #nu                  = alpha * cs * H
+    #Sigma_0             = Model_Parameters["initial_sigma"]
+    #M_dot_0             = -3 * np.pi * viscosity * Sigma_0
     
-
+    if args.Lightcurves:
+        plt.figure()
+        plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'black', label = 'infared luminosity')
+        plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
+        plt.xlabel('time')
+        plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
+        plt.legend()
+        #try:
+        #    savename = os.getcwd() + "/TotalAngularMomentum.%04d.png"%(CurrentTime)
+        #    plt.savefig(savename, dpi=400)
+        #except:
+        plt.show()
 
     if args.Disk_Momentum:
         plt.figure()
@@ -160,6 +186,18 @@ if __name__ == '__main__':
             plt.savefig(savename, dpi=400)
         except:
             plt.show()
+
+    if args.Energy:
+        plt.figure()
+        plt.plot(Final_Orbits, ts.energy[-len(Final_Orbits):], c = 'black', label = 'Total Energy')
+        plt.xlabel('time')
+        plt.title('Total Energy emitted by disk')
+        #try:
+        #    savename = os.getcwd() + "/TotalEnergyEmitted.%04d.png"%(CurrentTime)
+        #    plt.savefig(savename, dpi=400)
+        #except:
+        #    plt.show()
+        plt.show()
 
     if args.Torque_Components:
         InnerClipped_Torque = ts.innertorque[-len(Final_Orbits):] / M_dot_0
@@ -180,7 +218,7 @@ if __name__ == '__main__':
 
         
         #plt.plot(Final_Orbits,Normalised_Torque_g, c = 'blue', linewidth = 0.1)
-        #plt.plot(TimeBins[1:],MeanTorque_g,linewidth = 1.5, label = 'Binned Torque Mean Gravitational', c = 'black')
+        plt.plot(TimeBins[1:],MeanTorque_g,linewidth = 1.5, label = 'Binned Torque Mean Gravitational', c = 'black')
         plt.plot(TimeBins[1:],MeanTorque_a,linewidth = 1.5, label = 'Binned Torque Mean Accretion',linestyle = 'dashed', c = 'black')
         
         #plt.plot(ts.time, ts.jdisk)
@@ -196,6 +234,9 @@ if __name__ == '__main__':
             plt.savefig(savename, dpi=400)
         except:
             plt.show()
+
+
+        print('Torque Mean at t=1000 is',MeanTorque_g[0]+MeanTorque_a[0])
 
 
 
