@@ -15,6 +15,8 @@ from sailfish.physics.circumbinary import (
 )
 from sailfish.solver_base import SolverBase
 from sailfish.subdivide import subdivide, to_host, concat_on_host, lazy_reduce
+from cooling import OpticalEmission, InfaredEmission, cgs, EffectiveTemperature
+import numpy as np
 
 
 logger = getLogger(__name__)
@@ -79,6 +81,7 @@ class Patch:
         self.buffer_outer_radius = buffer_outer_radius
         self.buffer_surface_density = buffer_surface_density
         self.buffer_surface_pressure = buffer_surface_pressure
+        self.retrograde = physics.retrograde
 
         with self.execution_context:
             x0 = self.xl + 0.5 * mesh.dx
@@ -182,6 +185,7 @@ class Patch:
                 self.buffer_outer_radius,
                 self.physics.buffer_onset_width,
                 int(self.physics.buffer_is_enabled),
+                int(self.retrograde),
                 m1.position_x,
                 m1.position_y,
                 m1.velocity_x,
@@ -284,6 +288,8 @@ class Solver(SolverBase):
         ni, nj = mesh.shape
         self.domain_radius = self.mesh.x1
         self.buffer_onset_width = 0.1
+        self.infared_cache = None
+        self.optical_cache = None
 
         if solution is None:
             primitive = initial_condition(setup, mesh, time)
@@ -325,6 +331,7 @@ class Solver(SolverBase):
             )
             self.patches.append(patch)
 
+
     @property
     def solution(self):
         return concat_on_host(
@@ -338,6 +345,63 @@ class Solver(SolverBase):
         """
         return None
 
+    @property
+    def Cell_Length_CGS(self):
+        return (self.setup.length_scale_pc * cgs['pc']) * self.mesh.dx
+
+    @property
+    def kb_code(self):
+        return cgs['kb'] / (self.setup.SS73._mass * self.setup.SS73._length**2 / self.setup.SS73._time**2)
+
+    @property
+    def mp_code(self):
+        return cgs['mp'] / (self.setup.SS73._mass)
+
+    @property
+    def kappa_code(self):
+        return cgs['kappa'] / (self.setup.SS73._length**2 / self.setup.SS73._mass)
+
+    @property
+    def Precompute_Optical_Luminosity(self):
+        if self.optical_cache is None:
+            Temperature_Range  = np.logspace(5,15,int(1e6)) 
+            emission           = OpticalEmission(Temperature_Range, self.Cell_Length_CGS)
+            self.optical_cache = Temperature_Range, emission
+            return self.optical_cache
+        else:
+            return self.optical_cache
+
+    @property
+    def Precompute_Infared_Luminosity(self):
+        if self.infared_cache is None:
+            Temperature_Range  = np.logspace(1,15,int(1e6)) 
+            emission           = InfaredEmission(Temperature_Range, self.Cell_Length_CGS)
+            self.infared_cache = Temperature_Range, emission
+            return self.infared_cache
+        else:
+            return self.infared_cache
+
+    def optical_luminosity(self,patch):
+        x, y         = patch.cell_center_coordinate_arrays
+        Precomputed  = self.Precompute_Optical_Luminosity
+        Sigma        = patch.primitive[:, :, 0]
+        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+
+        Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
+        RescaledTemp = Teff * self.setup.AccretionRateRescaling**0.25
+        return np.interp(RescaledTemp, Precomputed[0], Precomputed[1])
+
+    def infared_luminosity(self,patch):
+        x, y         = patch.cell_center_coordinate_arrays
+        Precomputed  = self.Precompute_Infared_Luminosity
+        Sigma        = patch.primitive[:, :, 0]
+        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+
+        Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
+        RescaledTemp = Teff * self.setup.AccretionRateRescaling**0.25
+        return np.interp(RescaledTemp, Precomputed[0], Precomputed[1])
+
+
     def reductions(self):
         """
         Generate runtime reductions on the solution data for time series.
@@ -350,7 +414,7 @@ class Solver(SolverBase):
         da = self.mesh.dx * self.mesh.dy
         ng = self.num_guard
 
-        def get_field(patch, quantity, cut, mass, gravity=False, accretion=False):
+        def get_field(patch, quantity, cut, mass, gravity=False, accretion=False, buffer=False):
             """
             Return one of the udot fields: for a particular patch, conserved
             variable quantity, radial cut (optional), and point mass (either
@@ -367,11 +431,11 @@ class Solver(SolverBase):
                     return f
 
             if quantity == "mdot":
-                return get_field(patch, 0, cut, mass, gravity, accretion)
+                return get_field(patch, 0, cut, mass, gravity, accretion, buffer)
 
             if quantity == "torque":
-                fx = get_field(patch, 1, cut, mass, gravity, accretion)
-                fy = get_field(patch, 2, cut, mass, gravity, accretion)
+                fx = get_field(patch, 1, cut, mass, gravity, accretion, buffer)
+                fy = get_field(patch, 2, cut, mass, gravity, accretion, buffer)
                 return x * fy - y * fx
 
             if quantity == "sigma_m1":
@@ -390,6 +454,49 @@ class Solver(SolverBase):
                 ex = (v_dot_v * x - v_dot_r * vx) / GM - x / r
                 ey = (v_dot_v * y - v_dot_r * vy) / GM - y / r
                 return sigma * (ex + 1.0j * ey)
+
+            if quantity == "angular_momentum":
+                sigma = apply_radial_cut(patch.primitive[ng:-ng, ng:-ng, 0])
+                vx = apply_radial_cut(patch.primitive[ng:-ng, ng:-ng, 1])
+                vy = apply_radial_cut(patch.primitive[ng:-ng, ng:-ng, 2])
+                return sigma * (x * vy - y * vx)
+
+            if quantity == "buffer_torque":
+                fx = get_field(patch, 1, cut, mass, False, False, buffer=True)
+                fy = get_field(patch, 2, cut, mass, False, False, buffer=True)
+                return x * fy - y * fx
+
+            if quantity == "buffer_mass_rate":
+                return get_field(patch, 0, cut, mass, False, False, buffer=True)
+
+            if quantity == "power":
+                fx = get_field(patch, 1, cut, mass, gravity, accretion, buffer)
+                fy = get_field(patch, 2, cut, mass, gravity, accretion, buffer)
+                if mass == 1:
+                    m1, m2 = self._physics.point_masses(self.time)
+                    vx1, vy1 = m1.velocity_x, m1.velocity_y
+                    return vx1 * fx + vy1 * fy
+                elif mass == 2:
+                    m1, m2 = self._physics.point_masses(self.time)
+                    vx2, vy2 = m2.velocity_x, m2.velocity_y
+                    return vx2 * fx + vy2 * fy
+                else:
+                    raise ValueError("Mass option for 'power' must be 1 or 2.")
+
+            if quantity == "energy":
+                Energy = apply_radial_cut(patch.primitive[ng:-ng, ng:-ng, 3])
+                return Energy
+
+            if quantity == "Accreted_energy":
+                return get_field(patch, 3, cut, mass="both", gravity=False, accretion=True, buffer=False)
+
+            if quantity == "optical":
+                return self.optical_luminosity(patch)
+
+            if quantity == "infared":
+                return self.infared_luminosity(patch)
+            
+
 
             q = quantity
             i = self.patches.index(patch)
@@ -428,9 +535,20 @@ class Solver(SolverBase):
         pass1 = []
         pass2 = []
 
+
+        import sailfish.physics.kepler as kepler
+        m1, m2 = self._physics.point_masses(self.time)                                             # These are different PointMass structs with
+        m1 = kepler.PointMass(m1.mass, m1.position_x, m1.position_y, m1.velocity_x, m1.velocity_y) # different attributes....
+        m2 = kepler.PointMass(m2.mass, m2.position_x, m2.position_y, m2.velocity_x, m2.velocity_y) 
+        orbital_state = kepler.OrbitalState(primary=m1, secondary=m2)
+
         for d in diagnostics:
             if d.quantity == "time":
                 pass1.append(self.time / self.setup.reference_time_scale)
+            elif d.quantity == "semimajor-axis":
+                pass1.append(orbital_state.semimajor_axis)
+            elif d.quantity == "eccentricity":
+                pass1.append(orbital_state.eccentricity)
             else:
                 pass1.append(get_sum_fields(d))
 
@@ -441,6 +559,7 @@ class Solver(SolverBase):
                 pass2.append(item)
 
         return pass2
+
 
     @property
     def time(self):

@@ -533,7 +533,7 @@ def simulate(driver):
         main_logger.info(
             f"[{iteration:04d}] t={user_time:0.3f} dt={dt:.3e} Mzps={Mzps:.3f}"
         )
-        if (driver.setup_name == 'binary-inspiral') & (iteration % 100 == 0):
+        if ((driver.setup_name == 'cool-inspiral') or  (driver.setup_name == 'binary-inspiral')) & (iteration % 100 == 0):
             OEI = setup.Orbital_Elements_for_Inspiral(siml_time)
             
 
@@ -868,7 +868,7 @@ def main():
                 with open(driver.chkpt_file, "rb") as file:
                     chkpt = pk.load(file)
 
-            if (driver.setup_name == 'binary-inspiral') or (chkpt["setup_name"] == 'binary-inspiral'):
+            if (driver.setup_name == 'cool-inspiral') or (driver.setup_name == 'binary-inspiral') or (chkpt["setup_name"] == 'cool-inspiral') or (chkpt["setup_name"] == 'binary-inspiral'):
 
                 from sailfish.physics.Peters_Inspiral import Orbital_Inspiral
 

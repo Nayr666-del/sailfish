@@ -12,6 +12,7 @@ from sailfish.physics.circumbinary import (
     ViscosityModel,
 )
 from sailfish.physics.kepler import OrbitalElements, OrbitalState
+import cooling
 from sailfish.physics.Peters_Inspiral import Orbital_Inspiral
 from sailfish.setup_base import SetupBase, SetupError, param
 import os
@@ -921,4 +922,336 @@ class BinaryInspiral(SetupBase):
 
     def checkpoint_diagnostics(self, time):
         return dict(point_masses=self.point_masses(time))
+
+
+
+
+
+
+class CoolInspiral(SetupBase):
+    r"""
+    A circumbinary disk setup for GW-inspiralling binaries.
+    """
+
+    eos                  = param("gamma-law", "EOS type: either isothermal or gamma-law")
+    domain_radius        = param(10.0, "half side length of the square computational domain")
+    mass_ratio           = param(1.0, "component mass ratio m2 / m1 <= 1", mutable=True)
+    sink_rate            = param(1.0, "component sink rate", mutable=True)
+    sink_radius          = param(0.03, "component sink radius", mutable=True)
+    softening_length     = param(0.03, "gravitational softening length", mutable=True)
+    buffer_is_enabled    = param(True, "whether the buffer zone is enabled", mutable=True)
+    sink_model           = param("acceleration_free", "sink [acceleration_free|force_free|torque_free]", mutable=True)
+    initial_sigma        = param(0.057, "initial disk surface density at r=a (gamma-law)")
+    initial_pressure     = param(6.7e-5, "initial disk surface pressure at r=a (gamma-law)")
+    alpha                = param(0.1, "alpha-viscosity parameter (gamma-law)")
+    gamma_law_index_gas  = param(5.0 / 3.0, "adiabatic index (gamma-law)")
+    constant_softening   = param(True, "whether to use constant softening (gamma-law)")
+    retrograde           = param(False, "is disk retrograde?")
+    which_diagnostics    = param("none", "diagnostics set to get from solver [none|mdots]")
+
+    # Cooling specific parameters
+    central_mass_msun    = param(8e6, "Mass of the central object in solar masses")
+    length_scale_pc      = param(9.7e-4, "Length scale in parsecs") # Correct this!
+    mach_number_3a       = param(21, "Disk Mach number just outside cavity") 
+
+    # Radiation Pressure Contribution (Optional)
+    beta                 = param(1., "Gas pressure fraction P_gas/P_tot where P_tot = P_gas+P_rad") 
+
+    # Inspiral specific parameters
+    init_separation_rg   = param(100.0, "initial semi-major axis in grav-radii")
+    init_eccentricity    = param(0.0, "orbital eccentricity of the binary")
+    inspiral_start_time  = param(1000., "how many orbits before inspiral starts")
+    integration_timestep = param(0.001, "timestep for integrating the inspiral")
+    semi_major_axis_list = param([]," List of all semi-major axes over the inspiral")
+    eccentricity_list    = param([]," List of all eccentricities axes over the inspiral")
+    inspiral_time_list   = param([]," List of all eccentricities axes over the inspiral")
+    Fixed_Phases         = param([]," Find the phase at each point in the inspiral which can be integrated ")
+    gw_inspiral_time     = param(0.," The circular inspiral time for a0 = 1 ")
+
+    a0 = 1.0
+    GM = 1.0
+
+    @property
+    def is_isothermal(self):
+        return self.eos == "isothermal"
+
+    @property
+    def is_gamma_law(self):
+        return self.eos == "gamma-law"
+
+    @property
+    def gamma_law_index(self):
+        #return self.beta + (4-3*self.beta)**2 * (self.gamma_law_index_gas-1) / ( self.beta + 12 * (self.gamma_law_index_gas-1) * (1-self.beta) )
+        return cooling.gamma_law_index(self.beta, self.gamma_law_index_gas)
+
+    @property
+    def SS73(self):
+        SS73_Setup = cooling.ShakuraSunyaevDisk(
+            central_mass_msun = self.central_mass_msun, 
+            length_scale_pc   = self.length_scale_pc,
+            mach_number_3a    = self.mach_number_3a,
+            alpha             = self.alpha
+            )
+        return SS73_Setup
+
+    @property
+    def AccretionRateRescaling(self):
+        EddingtonFrac     = self.SS73._eddington_fraction
+        return 10/EddingtonFrac
+
+    @property
+    def cooling_coefficient(self):
+        CoolingCoefficient = self.SS73.cooling_coefficient(self.gamma_law_index)
+        return CoolingCoefficient
+
+
+    def primitive(self, t, coords, primitive):
+        x, y = coords
+        r    = sqrt(x * x + y * y)
+        r_softened = sqrt(x * x + y * y + self.softening_length * self.softening_length)
+        phi_hat_x  = -y / max(r, 1e-12)
+        phi_hat_y  = +x / max(r, 1e-12)
+
+        sign = 1.0
+        if self.retrograde == True:
+                sign = -1.
+
+        if self.is_isothermal:
+            primitive[0] = self.initial_sigma
+            primitive[1] = sqrt(self.GM / r_softened) * phi_hat_x * sign
+            primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y * sign
+
+        elif self.is_gamma_law:
+            # See eq. (A2) from Goodman (2003)
+            primitive[0] = (
+                self.initial_sigma
+                * r_softened ** (-3.0 / 5.0)
+                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+            )
+            primitive[1] = sqrt(self.GM / r_softened) * phi_hat_x
+            primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y
+            primitive[3] = (
+                self.initial_pressure
+                * r_softened ** (-3.0 / 2.0)
+                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+            )
+
+    def mesh(self, resolution):
+        return PlanarCartesian2DMesh.centered_square(self.domain_radius, resolution)
+
+    @property
+    def default_resolution(self):
+        return 3000
+
+    @property
+    def physics(self):
+        if self.is_gamma_law:
+            return dict(
+                eos_type=EquationOfState.GAMMA_LAW,
+                gamma_law_index=self.gamma_law_index,
+                point_mass_function=self.point_masses,
+                buffer_is_enabled=self.buffer_is_enabled,
+                buffer_driving_rate=1000.0,  # default value in circumbinary.py
+                buffer_onset_width=0.1,  # default value in circumbinary.py
+                cooling_coefficient=self.cooling_coefficient,
+                constant_softening=self.constant_softening,
+                viscosity_model=ViscosityModel.CONSTANT_ALPHA if self.alpha > 0.0 else ViscosityModel.NONE,
+                viscosity_coefficient=0.0,
+                alpha=self.alpha,
+                diagnostics=self.diagnostics,
+                retrograde=self.retrograde,
+            )
+
+    @property
+    def diagnostics(self):
+        if self.which_diagnostics == "david":
+            return [
+                dict(quantity="time"),
+                dict(quantity="semimajor-axis"),
+                dict(quantity="eccentricity"),
+                dict(quantity="energy"),
+                dict(quantity="Accreted_energy"),
+                dict(quantity="optical"),
+                dict(quantity="infared"),
+                dict(quantity="mdot", which_mass=1, accretion=True),
+                dict(quantity="mdot", which_mass=2, accretion=True),
+                dict(quantity="torque", which_mass='both', gravity=True),
+                dict(quantity="torque", which_mass='both', accretion=True),
+                dict(quantity="power" ,which_mass=1,gravity=True),
+                dict(quantity="power" ,which_mass=2,gravity=True),
+                dict(quantity="power" ,which_mass=1,accretion=True),
+                dict(quantity="power" ,which_mass=2,accretion=True),
+                dict(quantity="angular_momentum"),
+                #dict(quantity="eccentricity_vector", radial_cut=(1.0, 6.0)),
+                #dict(quantity="torque",which_mass='both',gravity=True, radial_cut=(0.0, 1.0)),
+                #dict(quantity="torque",which_mass='both',gravity=True, radial_cut=(1.0, 10.0)),
+                #dict(quantity="power",which_mass=2,gravity=True, radial_cut=(0.0, 10.0)),
+                #dict(quantity="power",which_mass=2,accretion=True, radial_cut=(0.0, 10.0)),
+                #dict(quantity="power",which_mass=1,gravity=True, radial_cut=(0.0, 1.0)),
+                #dict(quantity="power",which_mass=1,gravity=True, radial_cut=(1.0, 10.0)),
+                #dict(quantity="power",which_mass=2,gravity=True, radial_cut=(0.0, 1.0)),
+                #dict(quantity="power",which_mass=2,gravity=True, radial_cut=(1.0, 10.0)),
+            ]
+
+        elif self.which_diagnostics != "none":
+            return [
+                dict(quantity="time"),
+                dict(quantity="mdot", which_mass=1, accretion=True),
+                dict(quantity="mdot", which_mass=2, accretion=True),
+            ]
+        else:
+            return []
+
+    @property
+    def solver(self):
+        if self.is_isothermal:
+            return "cbdiso_2d"
+        elif self.is_gamma_law:
+            return "cbdgam_2d"
+
+    @property
+    def boundary_condition(self):
+        return "outflow"
+
+    @property
+    def reference_time_scale(self):
+        return 2.0 * pi
+
+    def do_inspiral(self, time):
+        if (self.inspiral_start_time * self.reference_time_scale <= time <= self.inspiral_start_time * self.reference_time_scale + self.inspiral_time_list[-1]):
+            return 'Inspiralling'
+        elif (time <= self.inspiral_start_time * self.reference_time_scale):
+            return 'Burn-in'
+        elif (self.inspiral_time_list[-1] + self.inspiral_start_time * self.reference_time_scale <= time):
+            return 'Merged'
+
+    def Orbital_Elements_for_Inspiral(self, time):
+        flag = self.do_inspiral(time)
+        if flag == 'Inspiralling':
+            Inspiral_t = time - self.inspiral_start_time * self.reference_time_scale
+
+            Inspiral_Progress         = Inspiral_t/self.integration_timestep
+            Nstep                     = floor(Inspiral_Progress)
+            Position_in_Bracket_N0_N1 = Inspiral_Progress - float(Nstep)
+
+            self.semi_major_axis_list.append(1e-5)
+            self.eccentricity_list.append(1e-5)
+            
+            try:
+                SemiMajorAxis_N0 = self.semi_major_axis_list[Nstep]
+                Eccentricity_N0  = self.eccentricity_list[Nstep]
+
+                SemiMajorAxis_N1 = self.semi_major_axis_list[Nstep+1]
+                Eccentricity_N1  = self.eccentricity_list[Nstep+1]
+
+                Interpolated_SMA = SemiMajorAxis_N0+Position_in_Bracket_N0_N1 *(SemiMajorAxis_N1-SemiMajorAxis_N0)
+                Interpolated_ECC = Eccentricity_N0+Position_in_Bracket_N0_N1 *(Eccentricity_N1-Eccentricity_N0)
+                return [Interpolated_SMA,Interpolated_ECC]
+            
+            except IndexError as e:
+                return 'Merged'#[1e-5,0.]
+
+        elif flag == 'Burn-in':
+            return [self.a0,self.init_eccentricity]
+
+        elif flag == 'Merged':
+            return 'Merged'
+
+
+    def Interpolated_Phase(self,time):
+        flag = self.do_inspiral(time)
+        
+        if flag == 'Inspiralling':
+            Inspiral_t = time - self.inspiral_start_time * self.reference_time_scale
+
+            Inspiral_Progress         = Inspiral_t/self.integration_timestep
+            Nstep                     = floor(Inspiral_Progress)
+            Position_in_Bracket_N0_N1 = Inspiral_Progress - float(Nstep)
+
+            self.Fixed_Phases.append(1e-5)
+
+            try:
+                Phase_N0 = self.Fixed_Phases[Nstep]
+                Phase_N1 = self.Fixed_Phases[Nstep + 1]
+
+                Interpolated_Phase = Phase_N0 + Position_in_Bracket_N0_N1 * (Phase_N1 - Phase_N0)
+
+                return Interpolated_Phase + self.inspiral_start_time * self.reference_time_scale
+
+            except IndexError as e:
+                return 'Merged'
+
+
+        elif flag == 'Burn-in':
+            from math import sqrt
+            return sqrt(self.GM/self.a0/self.a0/self.a0) * time
+
+        elif flag == 'Merged':
+            return 'Merged'
+        
+
+    def orbital_elements(self, time):
+        flag = self.do_inspiral(time)
+        OEI  = self.Orbital_Elements_for_Inspiral(time)
+        if OEI!='Merged':
+            return OrbitalElements(
+                    semimajor_axis=OEI[0],
+                    total_mass=1.0,
+                    mass_ratio=self.mass_ratio,
+                    eccentricity=OEI[1],
+                )
+        elif flag == 'Merged':
+            return 'Merged'
+
+
+    def point_masses(self, time):
+        from math import cos, sin, sqrt
+        m1  = 0.5
+        m2  = 0.5
+        OEI = self.Orbital_Elements_for_Inspiral(time)
+        if OEI !='Merged':
+            semi_major, eccen = self.Orbital_Elements_for_Inspiral(time)
+
+            omega_b = sqrt(self.GM / semi_major/ semi_major/ semi_major)
+            
+            x1 = 0.5 * semi_major * cos (self.Interpolated_Phase(time))
+            y1 = 0.5 * semi_major * sin (self.Interpolated_Phase(time))
+            x2 = -x1
+            y2 = -y1
+            vx1 = - omega_b * y1
+            vy1 = omega_b * x1
+            vx2 = -vx1
+            vy2 = -vy1
+
+            c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= self.sink_radius,)
+            c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= self.sink_radius,)
+            
+        elif OEI =='Merged':
+            x1      = 0.
+            x2      = 0.
+            y1      = 0.
+            y2      = 0.
+            vx1     = 0.
+            vy1     = 0.
+            vx2     = 0.
+            vy2     = 0.
+
+
+            c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
+            c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
+
+        return (c1,c2)
+
+    def checkpoint_diagnostics(self, time):
+        return dict(point_masses=self.point_masses(time))
+
+
+
+
+
+
+
+
+
+
 
