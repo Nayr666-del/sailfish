@@ -361,12 +361,69 @@ class Solver(SolverBase):
     def kappa_code(self):
         return cgs['kappa'] / (self.setup.SS73._length**2 / self.setup.SS73._mass)
 
+    
+    @property
+    def Precompute_Band_Luminosities(self):
+        logT_low  = 5
+        logT_high = 15
+
+        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
+        Log_Temperature_Diff = np.diff(np.linspace(logT_low,logT_high,int(1e6)))[0]
+        if self.optical_cache is None:
+            optical_emission   = OpticalEmission(Temperature_Range, self.Cell_Length_CGS)
+            self.optical_cache = optical_emission
+        else:
+            pass
+
+        if self.infared_cache is None:
+            infared_emission   = InfaredEmission(Temperature_Range, self.Cell_Length_CGS)
+            self.infared_cache = infared_emission
+        else:
+            pass
+
+        return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache)]
+
+    def Interpolate_Band_Luminosity(self, patch):
+        x, y         = patch.cell_center_coordinate_arrays
+        Precomputed  = self.Precompute_Band_Luminosities
+        Sigma        = patch.primitive[:, :, 0]
+        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+
+        Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
+        RescaledTemp = Teff * self.setup.AccretionRateRescaling ** 0.25
+
+        print(RescaledTemp)
+
+        Progress      = (np.log10(RescaledTemp) - 1)/ Precomputed[1]
+        N0            = np.floor(Progress).astype(int)
+        Bracket_N0_N1 = Progress - N0
+
+        try:
+            Optical_N0 = Precomputed[2][N0]
+            Optical_N1 = Precomputed[2][N0+1]
+            Infared_N0 = Precomputed[3][N0]
+            Infared_N1 = Precomputed[3][N0+1]
+
+            Interpolated_Optical = Optical_N0 + Bracket_N0_N1 * (Optical_N1-Optical_N0)
+            Interpolated_Infared = Infared_N0 + Bracket_N0_N1 * (Infared_N1-Infared_N0)
+
+            return Interpolated_Optical, Interpolated_Infared
+        
+        except IndexError as e:
+            raise IndexError("Interpolated temperature range needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
+
+    def optical_luminosity(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[0]
+
+    def infared_luminosity(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[1]
+    """
     @property
     def Precompute_Optical_Luminosity(self):
         if self.optical_cache is None:
             Temperature_Range  = np.logspace(5,15,int(1e6)) 
             emission           = OpticalEmission(Temperature_Range, self.Cell_Length_CGS)
-            self.optical_cache = Temperature_Range, emission
+            self.optical_cache = Temperature_Range, emission, np.diff(np.linspace(1,15,int(1e6)))[0]
             return self.optical_cache
         else:
             return self.optical_cache
@@ -374,33 +431,36 @@ class Solver(SolverBase):
     @property
     def Precompute_Infared_Luminosity(self):
         if self.infared_cache is None:
-            Temperature_Range  = np.logspace(1,15,int(1e6)) 
+            Temperature_Range  = np.logspace(5,15,int(1e6)) 
             emission           = InfaredEmission(Temperature_Range, self.Cell_Length_CGS)
-            self.infared_cache = Temperature_Range, emission
+            self.infared_cache = Temperature_Range, emission, np.diff(np.linspace(1,15,int(1e6)))[0]
             return self.infared_cache
         else:
             return self.infared_cache
 
+    
     def optical_luminosity(self,patch):
         x, y         = patch.cell_center_coordinate_arrays
         Precomputed  = self.Precompute_Optical_Luminosity
         Sigma        = patch.primitive[:, :, 0]
-        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e5)
 
         Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
         RescaledTemp = Teff * self.setup.AccretionRateRescaling**0.25
         return np.interp(RescaledTemp, Precomputed[0], Precomputed[1])
+
 
     def infared_luminosity(self,patch):
         x, y         = patch.cell_center_coordinate_arrays
         Precomputed  = self.Precompute_Infared_Luminosity
         Sigma        = patch.primitive[:, :, 0]
-        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e5)
 
         Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
         RescaledTemp = Teff * self.setup.AccretionRateRescaling**0.25
         return np.interp(RescaledTemp, Precomputed[0], Precomputed[1])
-
+    
+    """
 
     def reductions(self):
         """
