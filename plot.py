@@ -863,7 +863,17 @@ def main_cbdgam_2d():
         CurrentTime = chkpt["time"]/ 2 / np.pi
         mesh        = chkpt["mesh"]
         prim        = chkpt["solution"]
-        f           = fields[args.field](prim).T
+        
+        if args.field == 'Temperature':
+            from cooling import gamma_law_index, cgs
+
+            kb_code = cgs['kb'] / (chkpt['model_parameters'].setup.SS73._mass * chkpt['model_parameters'].setup.SS73._length**2 / chkpt['model_parameters'].setup.SS73._time**2)
+            mp_code = cgs['mp'] / (chkpt['model_parameters'].setup.SS73._mass)
+
+            f = ((fields["pre"](prim) / fields["sigma"](prim)) * (mp_code / kb_code)).T
+            
+        else:
+            f = fields[args.field](prim).T
 
         if args.log:
             f = np.log10(f)
