@@ -413,10 +413,18 @@ class Solver(SolverBase):
 
 
     def optical_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[0]
+        try:
+            return self.Interpolate_Band_Luminosity(patch)[0]
+        except TypeError as e:
+            return 0
+
 
     def infared_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[1]
+        try:
+            return self.Interpolate_Band_Luminosity(patch)[1]
+        except TypeError as e:
+            return 0
+            
     """
     @property
     def Precompute_Optical_Luminosity(self):
