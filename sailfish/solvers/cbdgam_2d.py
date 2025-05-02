@@ -410,9 +410,10 @@ class Solver(SolverBase):
         
         except IndexError as e:
             warnings.warn("Interpolated temperature range needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])), UserWarning)
+            return 0., 0.
         except TypeError as e:
             warnings.warn("The rescaled, effective temperature inside a cell was %g"%(RescaledTemp), UserWarning)
-            return 0.
+            return 0., 0.
 
 
     def optical_luminosity(self,patch):
