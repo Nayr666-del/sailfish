@@ -346,6 +346,7 @@ class Solver(SolverBase):
         """
         return None
 
+    
     @property
     def Cell_Length_CGS(self):
         return (self.setup.length_scale_pc * cgs['pc']) * self.mesh.dx
@@ -365,8 +366,8 @@ class Solver(SolverBase):
     
     @property
     def Precompute_Band_Luminosities(self):
-        logT_low  = 1
-        logT_high = 11
+        logT_low  = 0
+        logT_high = 10
 
         Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
         Log_Temperature_Diff = np.diff(np.linspace(logT_low,logT_high,int(1e6)))[0]
@@ -390,7 +391,7 @@ class Solver(SolverBase):
         Precomputed_low  = np.log10(Precomputed[0][0])
         Precomputed_high = np.log10(Precomputed[0][-1])
         Sigma            = patch.primitive[:, :, 0]
-        T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+        T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), Precomputed_low)
 
         Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
         RescaledTemp = Teff * self.setup.AccretionRateRescaling ** 0.25
