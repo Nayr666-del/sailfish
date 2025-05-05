@@ -414,8 +414,8 @@ class Solver(SolverBase):
             if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
                 raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
             elif np.min(Sigma) == 0.0:
-                logger.info(f"Lightcurve reductions failed at time={time:0.4f} due to zero surface density")
-                warnings.warn(f"Lightcurve reductions failed at time={time:0.4f} due to zero surface density")
+                logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
+                warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
             elif RescaledTemp.any() < self.Precompute_Band_Luminosities[0][0]:
                 raise IndexError("Interpolated temperature range limit needs to be lower in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][0])))
 
