@@ -366,10 +366,10 @@ class Solver(SolverBase):
     
     @property
     def Precompute_Band_Luminosities(self):
-        logT_low  = 0
+        logT_low  = -4
         logT_high = 10
 
-        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e7)) 
+        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
         Log_Temperature_Diff = np.diff(np.log10(Temperature_Range))[0]
         if self.optical_cache is None:
             optical_emission   = OpticalEmission(Temperature_Range, self.Cell_Length_CGS)
@@ -397,6 +397,11 @@ class Solver(SolverBase):
         RescaledTemp = Teff * self.setup.AccretionRateRescaling ** 0.25
 
         Progress      = (np.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
+        
+        if np.min(Progress) < 0:
+            raise IndexError("Interpolated temperature range limit needs to be lower in cbdgam_2d.py. Current value is logT_min = %g"%(np.log10(self.Precompute_Band_Luminosities[0][0])), 
+                "while the temperature dropped down to a value of logT = %g"%(np.log10(np.min(RescaledTemp))))
+
         N0            = np.floor(Progress).astype(int)
         Bracket_N0_N1 = Progress - N0
 
@@ -406,22 +411,20 @@ class Solver(SolverBase):
             Infared_N0 = Precomputed[3][N0]
             Infared_N1 = Precomputed[3][N0+1]
 
-            Interpolated_Optical = Optical_N0 #+ Bracket_N0_N1 * (Optical_N1-Optical_N0)
-            Interpolated_Infared = Infared_N0 #+ Bracket_N0_N1 * (Infared_N1-Infared_N0)
+            Interpolated_Optical = Optical_N0 + Bracket_N0_N1 * (Optical_N1-Optical_N0)
+            Interpolated_Infared = Infared_N0 + Bracket_N0_N1 * (Infared_N1-Infared_N0)
 
             return Interpolated_Optical, Interpolated_Infared
-            #return np.interp(RescaledTemp, Precomputed[0], Precomputed[2]), np.interp(RescaledTemp, Precomputed[0], Precomputed[3])
         
         except IndexError as e:
             if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
-                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
+                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT_min = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])),
+                    "while the temperature reached a value of logT = %g"%(np.log10(np.min(RescaledTemp))))
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 return np.zeros_like(Sigma), np.zeros_like(Sigma)
-            elif RescaledTemp.any() < self.Precompute_Band_Luminosities[0][0]:
-                raise IndexError("Interpolated temperature range limit needs to be lower in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][0])))
-
+                
             
 
     def optical_luminosity(self,patch):
