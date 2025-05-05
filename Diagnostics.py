@@ -170,11 +170,11 @@ if __name__ == '__main__':
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
         plt.legend()
-        #try:
-        #    savename = os.getcwd() + "/TotalAngularMomentum.%04d.png"%(CurrentTime)
-        #    plt.savefig(savename, dpi=400)
-        #except:
-        plt.show()
+        try:
+            savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)
+            plt.savefig(savename, dpi=400)
+        except:
+            plt.show()
 
     if args.Disk_Momentum:
         plt.figure()
