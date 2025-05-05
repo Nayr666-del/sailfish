@@ -384,15 +384,17 @@ class Solver(SolverBase):
         return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache)]
 
     def Interpolate_Band_Luminosity(self, patch):
-        x, y         = patch.cell_center_coordinate_arrays
-        Precomputed  = self.Precompute_Band_Luminosities
-        Sigma        = patch.primitive[:, :, 0]
-        T            = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
+        x, y             = patch.cell_center_coordinate_arrays
+        Precomputed      = self.Precompute_Band_Luminosities
+        Precomputed_low  = np.log10(Precomputed[0][0])
+        Precomputed_high = np.log10(Precomputed[0][-1])
+        Sigma            = patch.primitive[:, :, 0]
+        T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 1e1)
 
         Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
         RescaledTemp = Teff * self.setup.AccretionRateRescaling ** 0.25
 
-        Progress      = (np.log10(RescaledTemp) - 1)/ Precomputed[1]
+        Progress      = (np.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
         N0            = np.floor(Progress).astype(int)
         Bracket_N0_N1 = Progress - N0
 
