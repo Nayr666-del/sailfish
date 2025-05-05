@@ -364,8 +364,8 @@ class Solver(SolverBase):
     
     @property
     def Precompute_Band_Luminosities(self):
-        logT_low  = 5
-        logT_high = 15
+        logT_low  = 2
+        logT_high = 12
 
         Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
         Log_Temperature_Diff = np.diff(np.linspace(logT_low,logT_high,int(1e6)))[0]
@@ -411,9 +411,9 @@ class Solver(SolverBase):
         
         except IndexError as e:
             if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
-                raise IndexError("Interpolated temperature range needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
+                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
             elif RescaledTemp.any() < self.Precompute_Band_Luminosities[0][0]:
-                raise IndexError("Lower bound error")
+                raise IndexError("Interpolated temperature range limit needs to be lower in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][0])))
             else:
                 raise IndexError("Different Error")
             
