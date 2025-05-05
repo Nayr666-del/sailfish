@@ -17,7 +17,6 @@ from sailfish.solver_base import SolverBase
 from sailfish.subdivide import subdivide, to_host, concat_on_host, lazy_reduce
 from cooling import OpticalEmission, InfaredEmission, cgs, EffectiveTemperature
 import numpy as np
-import warnings
 
 
 logger = getLogger(__name__)
@@ -409,12 +408,7 @@ class Solver(SolverBase):
             return Interpolated_Optical, Interpolated_Infared
         
         except IndexError as e:
-            warnings.warn("Interpolated temperature range needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])), UserWarning)
-            return 0., 0.
-        except TypeError as e:
-            warnings.warn("The rescaled, effective temperature inside a cell was %g"%(RescaledTemp), UserWarning)
-            return 0., 0.
-
+            raise IndexError("Interpolated temperature range needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
 
     def optical_luminosity(self,patch):
         return self.Interpolate_Band_Luminosity(patch)[0]
