@@ -346,7 +346,7 @@ class Solver(SolverBase):
         """
         return None
 
-    
+
     @property
     def Cell_Length_CGS(self):
         return (self.setup.length_scale_pc * cgs['pc']) * self.mesh.dx
@@ -369,8 +369,8 @@ class Solver(SolverBase):
         logT_low  = 0
         logT_high = 10
 
-        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
-        Log_Temperature_Diff = np.diff(np.linspace(logT_low,logT_high,int(1e6)))[0]
+        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e7)) 
+        Log_Temperature_Diff = np.diff(np.log10(Temperature_Range))[0]
         if self.optical_cache is None:
             optical_emission   = OpticalEmission(Temperature_Range, self.Cell_Length_CGS)
             self.optical_cache = optical_emission
@@ -391,7 +391,7 @@ class Solver(SolverBase):
         Precomputed_low  = np.log10(Precomputed[0][0])
         Precomputed_high = np.log10(Precomputed[0][-1])
         Sigma            = patch.primitive[:, :, 0]
-        T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), Precomputed_low)
+        T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 10**Precomputed_low)
 
         Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
         RescaledTemp = Teff * self.setup.AccretionRateRescaling ** 0.25
@@ -406,10 +406,11 @@ class Solver(SolverBase):
             Infared_N0 = Precomputed[3][N0]
             Infared_N1 = Precomputed[3][N0+1]
 
-            Interpolated_Optical = Optical_N0 + Bracket_N0_N1 * (Optical_N1-Optical_N0)
-            Interpolated_Infared = Infared_N0 + Bracket_N0_N1 * (Infared_N1-Infared_N0)
+            Interpolated_Optical = Optical_N0 #+ Bracket_N0_N1 * (Optical_N1-Optical_N0)
+            Interpolated_Infared = Infared_N0 #+ Bracket_N0_N1 * (Infared_N1-Infared_N0)
 
             return Interpolated_Optical, Interpolated_Infared
+            #return np.interp(RescaledTemp, Precomputed[0], Precomputed[2]), np.interp(RescaledTemp, Precomputed[0], Precomputed[3])
         
         except IndexError as e:
             if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
