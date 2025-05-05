@@ -412,7 +412,7 @@ class Solver(SolverBase):
         except IndexError as e:
             if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
                 raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
-            elif np.isnan(RescaledTemp).any()
+            elif np.isnan(RescaledTemp).any():
                     raise ValueError("Nan temperature")
             elif RescaledTemp.any() < self.Precompute_Band_Luminosities[0][0]:
                 print(np.min(RescaledTemp))
