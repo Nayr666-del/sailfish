@@ -195,10 +195,7 @@ def EffectiveTemperature(Sigma, kappa, T):
 	energy flux would require more sophisticated 3D modelling.
 	""" 
 	optical_depth = kappa * Sigma
-	OUT = T * (4./3./optical_depth)**0.25
-	if np.isnan(OUT).any():
-		print('optical_depth', optical_depth)
-	return OUT
+	return T * (4./3./optical_depth)**0.25
 
 # Precompute the fixed values for the infrared and optical bands
 nu_infared_low  = cgs['c'] / (0.1)     # 1 mm = 0.1 cm
