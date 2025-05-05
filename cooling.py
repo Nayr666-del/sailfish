@@ -196,7 +196,7 @@ def EffectiveTemperature(Sigma, kappa, T):
 	""" 
 	optical_depth = kappa * Sigma
 	OUT = T * (4./3./optical_depth)**0.25
-	if np.isnan(OUT):
+	if np.isnan(OUT).any():
 		print('optical_depth', optical_depth)
 	return OUT
 
