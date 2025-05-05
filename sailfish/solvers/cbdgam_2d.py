@@ -17,6 +17,7 @@ from sailfish.solver_base import SolverBase
 from sailfish.subdivide import subdivide, to_host, concat_on_host, lazy_reduce
 from cooling import OpticalEmission, InfaredEmission, cgs, EffectiveTemperature
 import numpy as np
+import warnings
 
 
 logger = getLogger(__name__)
@@ -413,7 +414,8 @@ class Solver(SolverBase):
             if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
                 raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])))
             elif np.min(Sigma) == 0.0:
-                raise ValueError("Lightcurve reductions failed at time t = %g due to Sigma == 0.0 in cell"%(1))
+                logger.info(f"Lightcurve reductions failed at time={time:0.4f} due to zero surface density")
+                warnings.warn(f"Lightcurve reductions failed at time={time:0.4f} due to zero surface density")
             elif RescaledTemp.any() < self.Precompute_Band_Luminosities[0][0]:
                 raise IndexError("Interpolated temperature range limit needs to be lower in cbdgam_2d.py. Current value is logT = %g"%(np.log10(self.Precompute_Band_Luminosities[0][0])))
 
