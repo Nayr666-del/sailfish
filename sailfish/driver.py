@@ -545,6 +545,10 @@ def simulate(driver):
                 main_logger.info(
                     f"[orbit] a={ab:0.2f}  e={eb:.2f}  nrg={nrg:.2f}"
                 )
+                main_logger.info(
+                    f"CHECKING NOW a={driver.model_parameters['inspiral_start_time']:0.2f}"
+                )
+
             else:
                 main_logger.info(
                     f"[orbit] a={0.:0.2f}  e={0.:.2f}  nrg={0.:.2f}  Post Merger"
