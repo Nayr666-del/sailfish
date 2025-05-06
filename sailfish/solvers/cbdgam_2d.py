@@ -366,7 +366,7 @@ class Solver(SolverBase):
     
     @property
     def Precompute_Band_Luminosities(self):
-        logT_low  = -4
+        logT_low  = -5
         logT_high = 10
 
         Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
