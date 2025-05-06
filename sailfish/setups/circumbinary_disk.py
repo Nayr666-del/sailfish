@@ -796,12 +796,14 @@ class BinaryInspiral(SetupBase):
         return 2.0 * pi
 
     def do_inspiral(self, time):
-        if (self.inspiral_start_time * self.reference_time_scale <= time <= self.inspiral_start_time * self.reference_time_scale + self.inspiral_time_list[-1]):
-            return 'Inspiralling'
-        elif (time <= self.inspiral_start_time * self.reference_time_scale):
+        if (time <= self.inspiral_start_time * self.reference_time_scale):
             return 'Burn-in'
-        elif (self.inspiral_time_list[-1] + self.inspiral_start_time * self.reference_time_scale <= time):
+        elif (self.inspiral_start_time * self.reference_time_scale <= time <= self.inspiral_start_time * self.reference_time_scale + self.inspiral_time_list[-1]):
+            return 'Inspiralling'
+        elif (self.inspiral_start_time * self.reference_time_scale + self.inspiral_time_list[-1] <= time):
             return 'Merged'
+        else:
+            raise ValueError("Inspiral flag failed. The current time is t = %g, the inspiral start time is tstart = %g nd the inspiral time takes tgw = %g"%(time/2/np.pi, self.inspiral_start_time), self.inspiral_time_list[-1]/2/np.pi)
 
     def Orbital_Elements_for_Inspiral(self, time):
         flag = self.do_inspiral(time)
