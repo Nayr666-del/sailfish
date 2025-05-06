@@ -152,7 +152,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 1000.
+    Number_of_Orbits    = 20.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -167,6 +167,7 @@ if __name__ == '__main__':
         plt.figure()
         plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'black', label = 'infared luminosity')
         plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
+        #
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
         plt.legend()
