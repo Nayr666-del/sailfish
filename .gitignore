@@ -10,3 +10,4 @@ myenv/
 sailfish/__init__.pyc
 test_venv/
 MovieMaker.slurm
+*.png
