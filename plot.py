@@ -863,12 +863,24 @@ def main_cbdgam_2d():
         CurrentTime = chkpt["time"]/ 2 / np.pi
         mesh        = chkpt["mesh"]
         prim        = chkpt["solution"]
+
         
+        import cooling
+
+        SS73 = cooling.ShakuraSunyaevDisk(
+            central_mass_msun = chkpt['driver'].model_parameters['central_mass_msun'], 
+            length_scale_pc   = chkpt['driver'].model_parameters['length_scale_pc'],
+            mach_number_3a    = chkpt['driver'].model_parameters['mach_number_3a'],
+            alpha             = chkpt['driver'].model_parameters['alpha']
+        )
+        
+
         if args.field == 'Temperature':
             from cooling import gamma_law_index, cgs
 
-            kb_code = cgs['kb'] / (chkpt['model_parameters'].setup.SS73._mass * chkpt['model_parameters'].setup.SS73._length**2 / chkpt['model_parameters'].setup.SS73._time**2)
-            mp_code = cgs['mp'] / (chkpt['model_parameters'].setup.SS73._mass)
+
+            kb_code = cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
+            mp_code = cgs['mp'] / (SS73._mass)
 
             f = ((fields["pre"](prim) / fields["sigma"](prim)) * (mp_code / kb_code)).T
             
