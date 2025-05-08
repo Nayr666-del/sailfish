@@ -105,6 +105,28 @@ class Patch:
         """
         return self.coordinate_array_x, self.coordinate_array_y
 
+    def detect_density_floor(self):
+        rho  = self.primitive1[:, :, 0]
+        mask = rho <= self.options.density_floor * 1.01  # times some small tolerance
+        mask[:2, :]  = False
+        mask[-2:, :] = False
+        mask[:, :2]  = False
+        mask[:, -2:] = False
+        if self.xp.any(mask):
+            i, j  = self.xp.where(mask)
+            count = self.xp.unique(i).size
+            iteration = 0
+
+            ######### CHECK GPU COMPATABILITY #########
+            for idx in range(0,count-1):
+                x = self.coordinate_array_x[i[idx], 0]
+                y = self.coordinate_array_y[0, j[idx]]
+                print(f"[WARNING] Density floor hit at cell (x={x:.3e}, y={y:.3e}), rho={rho[i[idx], j[idx]]:.3e}")
+                iteration +=1
+
+                warnings.warn(f"Density floor was triggered during evolution at (x={x:.3e}, y={y:.3e}), rho={rho[i[idx], j[idx]]:.3e}")
+
+
     def point_mass_source_term(self, which_mass, gravity=False, accretion=False):
         ng = 2  # number of guard cells
         if which_mass not in (1, 2):
@@ -674,6 +696,8 @@ class Solver(SolverBase):
         self.set_bc("primitive1")
         for patch in self.patches:
             patch.advance_rk(rk_param, dt)
+            patch.detect_density_floor()
+
 
     def set_bc(self, array):
         ng = self.num_guard
