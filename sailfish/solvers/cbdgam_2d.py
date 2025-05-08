@@ -367,9 +367,9 @@ class Solver(SolverBase):
     @property
     def Precompute_Band_Luminosities(self):
         logT_low  = -5
-        logT_high = 10
+        logT_high = 12
 
-        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e6)) 
+        Temperature_Range    = np.logspace(logT_low,logT_high,int(1e7)) 
         Log_Temperature_Diff = np.diff(np.log10(Temperature_Range))[0]
         if self.optical_cache is None:
             optical_emission   = OpticalEmission(Temperature_Range, self.Cell_Length_CGS)
@@ -417,14 +417,15 @@ class Solver(SolverBase):
             return Interpolated_Optical, Interpolated_Infared
         
         except IndexError as e:
-            if RescaledTemp.any() > self.Precompute_Band_Luminosities[0][-1]:
+            if np.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
                 raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT_min = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])),
                     "while the temperature reached a value of logT = %g"%(np.log10(np.min(RescaledTemp))))
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 return np.zeros_like(Sigma), np.zeros_like(Sigma)
-                
+            else:
+                print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             
 
     def optical_luminosity(self,patch):
