@@ -25,7 +25,7 @@ logger = getLogger(__name__)
 
 class Options(NamedTuple):
     pressure_floor: float = 1e-12
-    density_floor: float = 1e-12
+    density_floor: float = 1e-16
     velocity_ceiling: float = 1e16
     mach_ceiling: float = 1e5
 
@@ -440,8 +440,8 @@ class Solver(SolverBase):
         
         except IndexError as e:
             if np.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
-                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT_min = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])),
-                    "while the temperature reached a value of logT = %g"%(np.log10(np.min(RescaledTemp))))
+                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT_max = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])),
+                    "while the temperature reached a value of logT = %g"%(np.log10(np.max(RescaledTemp))))
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
