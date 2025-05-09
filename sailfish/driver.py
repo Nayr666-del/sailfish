@@ -476,6 +476,7 @@ def simulate(driver):
     logger.info(f"CFL number is {cfl_number}")
     logger.info(f"simulation time / user time is {reference_time:0.4f}")
     logger.info(f"recompute dt every {new_timestep_cadence} iterations")
+    logger.info(f"solver options {solver.options}")
     #setup.print_model_parameters(newlines=True, logger=main_logger)
 
     def grab_state():
