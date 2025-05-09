@@ -867,11 +867,13 @@ def main_cbdgam_2d():
         
         import cooling
 
+
+
         SS73 = cooling.ShakuraSunyaevDisk(
-            central_mass_msun = chkpt['driver'].model_parameters['central_mass_msun'], 
-            length_scale_pc   = chkpt['driver'].model_parameters['length_scale_pc'],
-            mach_number_3a    = chkpt['driver'].model_parameters['mach_number_3a'],
-            alpha             = chkpt['driver'].model_parameters['alpha']
+            central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
+            length_scale_pc   = chkpt['model_parameters']['length_scale_pc'],
+            mach_number_3a    = chkpt['model_parameters']['mach_number_3a'],
+            alpha             = chkpt['model_parameters']['alpha']
         )
         
 
