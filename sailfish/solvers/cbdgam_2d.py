@@ -117,14 +117,7 @@ class Patch:
             count = self.xp.unique(i).size
             iteration = 0
 
-            ######### CHECK GPU COMPATABILITY #########
-            for idx in range(0,count-1):
-                x = self.coordinate_array_x[i[idx], 0]
-                y = self.coordinate_array_y[0, j[idx]]
-                print(f"[WARNING] Density floor hit at cell (x={x:.3e}, y={y:.3e}), rho={rho[i[idx], j[idx]]:.3e}")
-                iteration +=1
-
-                warnings.warn(f"Density floor was triggered during evolution at (x={x:.3e}, y={y:.3e}), rho={rho[i[idx], j[idx]]:.3e}")
+            print(f"[WARNING] Density floor hit N={count:.3e} times")
 
 
     def point_mass_source_term(self, which_mass, gravity=False, accretion=False):
@@ -389,7 +382,7 @@ class Solver(SolverBase):
     @property
     def Precompute_Band_Luminosities(self):
         logT_low  = -5
-        logT_high = 12
+        logT_high = 14
 
         Temperature_Range    = np.logspace(logT_low,logT_high,int(1e7)) 
         Log_Temperature_Diff = np.diff(np.log10(Temperature_Range))[0]
