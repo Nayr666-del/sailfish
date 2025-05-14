@@ -25,7 +25,7 @@ logger = getLogger(__name__)
 
 class Options(NamedTuple):
     pressure_floor: float = 1e-12
-    density_floor: float = 1e-16
+    density_floor: float = 1e-10
     velocity_ceiling: float = 1e16
     mach_ceiling: float = 1e5
 
@@ -104,20 +104,6 @@ class Patch:
         or cupy arrays, allocated for the device this patch is assigned to.
         """
         return self.coordinate_array_x, self.coordinate_array_y
-
-    def detect_density_floor(self):
-        rho  = self.primitive1[:, :, 0]
-        mask = rho <= self.options.density_floor * 1.01  # times some small tolerance
-        mask[:2, :]  = False
-        mask[-2:, :] = False
-        mask[:, :2]  = False
-        mask[:, -2:] = False
-        if self.xp.any(mask):
-            i, j  = self.xp.where(mask)
-            count = self.xp.unique(i).size
-            iteration = 0
-
-            print(f"[WARNING] Density floor hit N={count:.3e} times")
 
 
     def point_mass_source_term(self, which_mass, gravity=False, accretion=False):
@@ -400,6 +386,13 @@ class Solver(SolverBase):
 
         return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache)]
 
+
+    def detect_density_floor(self, patch):
+        rho  = patch.primitive1[:, :, 0]
+        mask = rho <= patch.options.density_floor * 1.01
+        return mask.sum()
+
+
     def Interpolate_Band_Luminosity(self, patch):
         x, y             = patch.cell_center_coordinate_arrays
         Precomputed      = self.Precompute_Band_Luminosities
@@ -574,6 +567,7 @@ class Solver(SolverBase):
                 else:
                     raise ValueError("Mass option for 'power' must be 1 or 2.")
 
+
             if quantity == "energy":
                 Energy = apply_radial_cut(patch.primitive[ng:-ng, ng:-ng, 3])
                 return Energy
@@ -586,7 +580,9 @@ class Solver(SolverBase):
 
             if quantity == "infared":
                 return self.infared_luminosity(patch)
-            
+     
+            if quantity == "floor":
+                return self.detect_density_floor(patch)
 
 
             q = quantity
@@ -689,7 +685,6 @@ class Solver(SolverBase):
         self.set_bc("primitive1")
         for patch in self.patches:
             patch.advance_rk(rk_param, dt)
-            patch.detect_density_floor()
 
 
     def set_bc(self, array):

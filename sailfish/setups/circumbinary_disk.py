@@ -1084,6 +1084,7 @@ class CoolInspiral(SetupBase):
                 dict(quantity="power" ,which_mass=1,accretion=True),
                 dict(quantity="power" ,which_mass=2,accretion=True),
                 dict(quantity="angular_momentum"),
+                dict(quantity="floor"),
                 #dict(quantity="eccentricity_vector", radial_cut=(1.0, 6.0)),
                 #dict(quantity="torque",which_mass='both',gravity=True, radial_cut=(0.0, 1.0)),
                 #dict(quantity="torque",which_mass='both',gravity=True, radial_cut=(1.0, 10.0)),

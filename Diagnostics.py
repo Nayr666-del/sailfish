@@ -44,7 +44,7 @@ class DavidTimeseries:
         self.power_a1        = np.array([s[13] for s in ts])
         self.power_a2        = np.array([s[14] for s in ts])
         self.jdisk           = np.array([s[15] for s in ts])
-
+        self.floor           = np.array([s[16] for s in ts])
         
 
             
@@ -139,6 +139,12 @@ if __name__ == '__main__':
         action='store_true',
         help="whether to plot the optical and infared luminosities of the disk",
     )
+    parser.add_argument(
+        "--FloorCount",
+        "-fc",
+        action='store_true',
+        help="whether to plot the number of cells that have reached the floor values",
+    )
     args = parser.parse_args()
     
 
@@ -159,9 +165,19 @@ if __name__ == '__main__':
     hist, edges         = np.histogram(Final_Orbits, bins=int(Number_of_Orbits))
     CumulativeTimeBin   = np.cumsum(hist)
     alpha               = Model_Parameters["alpha"]
-    #nu                  = alpha * cs * H
-    #Sigma_0             = Model_Parameters["initial_sigma"]
-    #M_dot_0             = -3 * np.pi * viscosity * Sigma_0
+
+    if args.FloorCount:
+        plt.figure()
+        plt.plot(ts.time, ts.floor, c = 'black', label = r'$N_\mathrm{cells}$ at floor')     
+        plt.xlabel('time')
+        plt.legend()
+        try:
+            savename = os.getcwd() + "/FloorCount.%04d.png"%(CurrentTime)
+            plt.savefig(savename, dpi=400)
+        except:
+            plt.show()
+
+        print("Nu",ts.floor)
     
     if args.Lightcurves:
         plt.figure()
