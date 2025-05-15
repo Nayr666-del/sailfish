@@ -396,28 +396,42 @@ class Solver(SolverBase):
     def Interpolate_Band_Luminosity(self, patch):
         x, y             = patch.cell_center_coordinate_arrays
         Precomputed      = self.Precompute_Band_Luminosities
-        Precomputed_low  = np.log10(Precomputed[0][0])
-        Precomputed_high = np.log10(Precomputed[0][-1])
+        Precomputed      = list(Precomputed)
+        Precomputed[2]   = self.xp.asarray(Precomputed[2])
+        Precomputed[3]   = self.xp.asarray(Precomputed[3])
+
+        Precomputed_low  = self.xp.log10(Precomputed[0][0])
+        Precomputed_high = self.xp.log10(Precomputed[0][-1])
+
+
+        #Precomputed_low  = np.log10(Precomputed[0][0])
+        #Precomputed_high = np.log10(Precomputed[0][-1])
         Sigma            = patch.primitive[:, :, 0]
-        T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 10**Precomputed_low)
+        #T                = np.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 10**Precomputed_low)
+        T                = self.xp.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 10**Precomputed_low)
 
         Teff         = EffectiveTemperature(Sigma, self.kappa_code, T)
         RescaledTemp = Teff * self.setup.AccretionRateRescaling ** 0.25
 
-        Progress      = (np.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
-        
-        if np.min(Progress) < 0:
-            raise IndexError("Interpolated temperature range limit needs to be lower in cbdgam_2d.py. Current value is logT_min = %g"%(np.log10(self.Precompute_Band_Luminosities[0][0])), 
-                "while the temperature dropped down to a value of logT = %g"%(np.log10(np.min(RescaledTemp))))
+        #Progress      = (np.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
+        Progress      = (self.xp.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
 
-        N0            = np.floor(Progress).astype(int)
+        if self.xp.min(Progress) < 0:
+            raise IndexError(
+            f"Interpolated temperature range limit needs to be lower in cbdgam_2d.py. "
+            f"Current value is logT_min = {self.xp.log10(self.Precompute_Band_Luminosities[0][0])}, "
+            f"while the temperature dropped down to a value of logT = {self.xp.log10(self.xp.min(RescaledTemp))}"
+        )
+
+        N0            = self.xp.floor(Progress).astype(int)
         Bracket_N0_N1 = Progress - N0
 
         try:
-            Optical_N0 = Precomputed[2][N0]
-            Optical_N1 = Precomputed[2][N0+1]
-            Infared_N0 = Precomputed[3][N0]
-            Infared_N1 = Precomputed[3][N0+1]
+            Optical_N0 = self.xp.take(Precomputed[2], N0, axis=0)
+            #Optical_N0 = self.xp.take(Precomputed[2],N0  ,axis=0)
+            Optical_N1 = self.xp.take(Precomputed[2],N0+1,axis=0)
+            Infared_N0 = self.xp.take(Precomputed[3],N0  ,axis=0)
+            Infared_N1 = self.xp.take(Precomputed[3],N0+1,axis=0)
 
             Interpolated_Optical = Optical_N0 + Bracket_N0_N1 * (Optical_N1-Optical_N0)
             Interpolated_Infared = Infared_N0 + Bracket_N0_N1 * (Infared_N1-Infared_N0)
@@ -425,13 +439,13 @@ class Solver(SolverBase):
             return Interpolated_Optical, Interpolated_Infared
         
         except IndexError as e:
-            if np.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
-                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT_max = %g"%(np.log10(self.Precompute_Band_Luminosities[0][-1])),
-                    "while the temperature reached a value of logT = %g"%(np.log10(np.max(RescaledTemp))))
+            if self.xp.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
+                raise IndexError("Interpolated temperature range limit needs to be higher in cbdgam_2d.py. Current value is logT_max = %g"%(self.xp.log10(self.Precompute_Band_Luminosities[0][-1])),
+                    "while the temperature reached a value of logT = %g"%(self.xp.log10(self.xp.max(RescaledTemp))))
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
-                return np.zeros_like(Sigma), np.zeros_like(Sigma)
+                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma)
             else:
                 print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             
