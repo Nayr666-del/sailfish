@@ -886,6 +886,15 @@ def main_cbdgam_2d():
 
             f = ((fields["pre"](prim) / fields["sigma"](prim)) * (mp_code / kb_code)).T
             
+            Tmid = 10 **-2 * mp_code/kb_code
+            
+            kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
+            Teff = cooling.EffectiveTemperature(1e-10, kappa_code, Tmid)
+            EmittingTemp = Teff * (10/SS73._eddington_fraction)** 0.25
+            print('Emitting Temp',EmittingTemp)
+            print('Optical depth', kappa_code * 1e-10)
+            
+
         else:
             f = fields[args.field](prim).T
 
