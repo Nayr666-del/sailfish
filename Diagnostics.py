@@ -8,10 +8,24 @@ import argparse
 from sailfish.setup_base import SetupBase
 from sailfish.physics.kepler import OrbitalState, PointMass
 
+
+class FixNumpyCoreUnpickler(pk.Unpickler):
+    def find_class(self, module, name):
+        if module.startswith("numpy._core"):
+            module = module.replace("numpy._core", "numpy.core")
+        return super().find_class(module, name)
+
+
+
 def load_checkpoint(filename, require_solver=None):
-    with open(filename, "rb") as file:
-        chkpt = pk.load(file)
-        return chkpt
+    with open(filename, "rb") as f:
+        chkpt = FixNumpyCoreUnpickler(f).load()
+    return chkpt
+    #with open(filename, "rb") as file:
+    #    chkpt = pk.load(file)
+    #    return chkpt
+
+
 
 def E_from_M(M, e=1.0):
     f = lambda E: E - e * np.sin(E) - M
@@ -19,8 +33,8 @@ def E_from_M(M, e=1.0):
     return E
 
 class DavidTimeseries:
-    def __init__(self, chkpt):
-        Checkpoint = load_checkpoint(chkpt)
+    def __init__(self, Checkpoint):
+        #Checkpoint = load_checkpoint(chkpt)
         ts = Checkpoint['timeseries']
 
         self.pointmasses     = Checkpoint["point_masses"]
@@ -44,7 +58,7 @@ class DavidTimeseries:
         self.power_a1        = np.array([s[13] for s in ts])
         self.power_a2        = np.array([s[14] for s in ts])
         self.jdisk           = np.array([s[15] for s in ts])
-        self.floor           = np.array([s[16] for s in ts])
+        #self.floor           = np.array([s[16] for s in ts])
         
 
             
@@ -149,7 +163,9 @@ if __name__ == '__main__':
     
 
     filename            = args.checkpoints[0]
-    ts                  = DavidTimeseries(filename)
+    chkpt               = load_checkpoint(filename)
+    ts                  = DavidTimeseries(chkpt)
+
     Primary,Secondary   = ts.pointmasses
     Point_MassPrimary   = PointMass(Primary.mass, Primary.position_x, Primary.position_y, Primary.velocity_x, Primary.velocity_y)
     Point_MassSecondary = PointMass(Secondary.mass,Secondary.position_x,Secondary.position_y,Secondary.velocity_x,Secondary.velocity_y)
@@ -165,6 +181,7 @@ if __name__ == '__main__':
     hist, edges         = np.histogram(Final_Orbits, bins=int(Number_of_Orbits))
     CumulativeTimeBin   = np.cumsum(hist)
     alpha               = Model_Parameters["alpha"]
+
 
     if args.FloorCount:
         plt.figure()
@@ -186,6 +203,7 @@ if __name__ == '__main__':
         #
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
+        plt.ylim([0,1e40])
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)
@@ -205,16 +223,44 @@ if __name__ == '__main__':
             plt.show()
 
     if args.Energy:
+        import cooling
+
+        Press = chkpt['solution'][...,3]
+        sigma = chkpt['solution'][...,0]
+
+        SS73 = cooling.ShakuraSunyaevDisk(
+            central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
+            length_scale_pc   = chkpt['model_parameters']['length_scale_pc'],
+            mach_number_3a    = chkpt['model_parameters']['mach_number_3a'],
+            alpha             = chkpt['model_parameters']['alpha']
+        )
+        
+        kb_code     = cooling.cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
+        mp_code     = cooling.cgs['mp'] / (SS73._mass)
+        kappa_code  = cooling.cgs['kappa'] / (SS73._length**2 / SS73._mass)
+        sigmab_code = cooling.cgs['sigmab'] / (SS73._mass / SS73._time**3)	
+        mid_T = (mp_code/kb_code) * (Press/sigma)
+
+        eff_T = ((4/3) * mid_T**4 / (sigma * kappa_code))**0.25
+
+        Q_dot = 2*sigmab_code * eff_T ** 4
+        # Keep in code units so multiply this by the area of each cell in code units
+        dx      = chkpt['mesh'].dx
+        Total_E = np.sum(Q_dot) * dx**2
+
         plt.figure()
         plt.plot(Final_Orbits, ts.energy[-len(Final_Orbits):], c = 'black', label = 'Total Energy')
+        plt.plot(Final_Orbits, ts.Accreted_energy[-len(Final_Orbits):], c = 'black', label = 'Accreted Energy')
+        #plt.scatter(Final_Orbits[-1], Total_E, marker = "*")
         plt.xlabel('time')
         plt.title('Total Energy emitted by disk')
-        #try:
-        #    savename = os.getcwd() + "/TotalEnergyEmitted.%04d.png"%(CurrentTime)
-        #    plt.savefig(savename, dpi=400)
-        #except:
-        #    plt.show()
-        plt.show()
+
+        try:
+            savename = os.getcwd() + "/TotalEnergyEmitted.%04d.png"%(CurrentTime)
+            plt.savefig(savename, dpi=400)
+        except:
+            plt.show()
+        #plt.show()
 
     if args.Torque_Components:
         InnerClipped_Torque = ts.innertorque[-len(Final_Orbits):] / M_dot_0
@@ -292,20 +338,20 @@ if __name__ == '__main__':
 
         plt.figure()
         #plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/np.mean(ts.mdot1[-len(Final_Orbits)-100:-len(Final_Orbits)]+ts.mdot2[-len(Final_Orbits)-100:-len(Final_Orbits)]),label='mdot',linewidth = 0.1, c = 'red')
-        plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/M_dot_0,label='mdot',linewidth = 0.1, c = 'red')
+        plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):]),label='mdot',linewidth = 0.1, c = 'red')
         plt.xlabel('Time [P]')
         plt.ylabel(r'$\dot{M}/\langle\dot{M}_0\rangle$')
-        plt.title(r'Accretion Rate e = %g, $\nu=%g$'%(np.round(OrbitalEccentricity,3),viscosity))
+        plt.title(r'Accretion Rate e = %g, $\alpha=%g$'%(np.round(OrbitalEccentricity,3),alpha))
         plt.axvline(x = 1000., linestyle = 'dashed', label ='Inspiral start', c = 'gray')
 
         #plt.ylim([0,2])
         plt.xlim([CurrentTime-Number_of_Orbits,CurrentTime])
-        AccretionRate = (ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/M_dot_0
+        AccretionRate = (ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])#/M_dot_0
         MeanAccretion = [np.mean(AccretionRate[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))]
         plt.plot(TimeBins[1:],MeanAccretion,linewidth = 0.5, label = 'Binned Means', c = 'black')
         plt.legend(loc = 'upper right')
         try:
-            savename = args.Output +  "/AccretionRate.%04d_nu%g.png"%(CurrentTime,viscosity)
+            savename = args.Output +  "/AccretionRate.%04d_nu%g.png"%(CurrentTime,alpha)
             plt.savefig(savename, dpi=400)
         except:
             plt.show()
