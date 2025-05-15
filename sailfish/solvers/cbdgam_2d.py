@@ -589,16 +589,6 @@ class Solver(SolverBase):
             if quantity == "Accreted_energy":
                 return get_field(patch, 3, cut, mass="both", gravity=False, accretion=True, buffer=False)
 
-            if quantity == "optical":
-                return self.optical_luminosity(patch)
-
-            if quantity == "infared":
-                return self.infared_luminosity(patch)
-     
-            if quantity == "floor":
-                return self.detect_density_floor(patch)
-
-
             q = quantity
             i = self.patches.index(patch)
 
@@ -650,6 +640,14 @@ class Solver(SolverBase):
                 pass1.append(orbital_state.semimajor_axis)
             elif d.quantity == "eccentricity":
                 pass1.append(orbital_state.eccentricity)
+            elif d.quantity == 'floor':
+                return int(sum(self.detect_density_floor(p) for p in self.patches))
+            elif d.quantity == "optical":
+                return sum(self.optical_luminosity(p) for p in self.patches)
+            elif d.quantity == "infared":
+                return sum(self.infared_luminosity(p) for p in self.patches)
+            
+
             else:
                 pass1.append(get_sum_fields(d))
 
