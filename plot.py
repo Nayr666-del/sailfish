@@ -866,33 +866,41 @@ def main_cbdgam_2d():
 
         
         import cooling
+        from cooling import gamma_law_index, EffectiveTemperature, cgs
 
-
+        gamma = gamma_law_index(chkpt['model_parameters']['beta'], chkpt['model_parameters']['gamma_law_index_gas'])
 
         SS73 = cooling.ShakuraSunyaevDisk(
             central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
             length_scale_pc   = chkpt['model_parameters']['length_scale_pc'],
             mach_number_3a    = chkpt['model_parameters']['mach_number_3a'],
-            alpha             = chkpt['model_parameters']['alpha']
-        )
+            alpha             = chkpt['model_parameters']['alpha'],
+            gamma             = gamma
+            )
+        
         
 
-        if args.field == 'Temperature':
-            from cooling import gamma_law_index, cgs
+        if args.field == 't':
+            Sigma    = fields["sigma"](prim)
+            Pressure = fields["pre"](prim)
 
-
-            kb_code = cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
-            mp_code = cgs['mp'] / (SS73._mass)
-
-            f = ((fields["pre"](prim) / fields["sigma"](prim)) * (mp_code / kb_code)).T
-            
-            Tmid = 10 **-2 * mp_code/kb_code
-            
+            kb_code    = cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
+            mp_code    = cgs['mp'] / (SS73._mass)
             kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
-            Teff = cooling.EffectiveTemperature(1e-10, kappa_code, Tmid)
-            EmittingTemp = Teff * (10/SS73._eddington_fraction)** 0.25
-            print('Emitting Temp',EmittingTemp)
-            print('Optical depth', kappa_code * 1e-10)
+
+            Midplane_T    = ((Pressure / Sigma) * (mp_code / kb_code)).T
+            optical_depth = Sigma * kappa_code
+            Teff          = EffectiveTemperature(optical_depth, Midplane_T)
+            EddingtonFrac = SS73._eddington_fraction
+            RescaledTemp  = Teff * (10/EddingtonFrac) ** 0.25
+            f             = RescaledTemp
+            
+            #Tmid = 10 **-2 * mp_code/kb_code
+            #kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
+            #Teff = cooling.EffectiveTemperature(1e-10, kappa_code, Tmid)
+            #EmittingTemp = Teff * (10/SS73._eddington_fraction)** 0.25
+            #print('Emitting Temp',EmittingTemp)
+            #print('Optical depth', kappa_code * 1e-10)
             
 
         else:
