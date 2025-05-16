@@ -39,6 +39,7 @@ class ShakuraSunyaevDisk(NamedTuple):
 	length_scale_pc   : float
 	mach_number_3a    : float
 	alpha             : float
+	gamma             : float
 
 	# -------------------------------------------------------------------------
 	@property
@@ -56,6 +57,10 @@ class ShakuraSunyaevDisk(NamedTuple):
 	@property
 	def _GM(self) -> float:
 		return self._mass * cgs['G']	
+	
+	@property
+	def _rschwz(self):
+		return 2 * self._GM / cgs['c']**2
 
 	@property
 	def _accretion_efficiency(self):
@@ -80,9 +85,9 @@ class ShakuraSunyaevDisk(NamedTuple):
 
 		This fraction of the eddington rate is returned
 		"""
-		f0 = 10.2604 * (cgs['mp']**4 / cgs['kb']**4 * cgs['sigmab'] / cgs['kappa'])**0.5
+		f0 = 10.2604 * (cgs['mp']**4 / cgs['kb']**4 * cgs['sigmab'] / cgs['kappa'])**0.5 * self.gamma**(-2.)
 		rm = 3 * self._length
-		return (f0 * self.alpha**0.5 * self._GM**(7./4.) * rm**(-1./4.) * self.mach_number_3a**-5
+		return (f0 * self.alpha**0.5 * self._GM**(7./4.) * self._length**(-1./4.) * self.mach_number_3a**-5
 		           / self._eddington_rate)
 	
 	@property
@@ -100,7 +105,7 @@ class ShakuraSunyaevDisk(NamedTuple):
 		   Sigma = (32 * 3^6 / pi^3)^(1/5) * (mp^4 / kb^4 * sigmab / kappa)^(1/5) 
 		   			* alpha^(-4/5) * (GM)^(1/5) * Mdot^(3/5) * r^(-3/5)
 		"""
-		s0 = 0.269274 * (cgs['mp']**4 / cgs['kb']**4 * cgs['sigmab'] / cgs['kappa'])**(1./5.)
+		s0 = 0.269274 * (cgs['mp']**4 / cgs['kb']**4 * cgs['sigmab'] / cgs['kappa'])**(1./5.) * self.gamma**(-4./5.)
 		return s0 * self.alpha**(-4./5.) * self._GM**(1./5.) * self._accretion_rate**(3./5.) * self._length**(-3./5.)
 
 	@property
@@ -109,7 +114,7 @@ class ShakuraSunyaevDisk(NamedTuple):
 
 		   P = (1 / 3 / pi) * alpha^-1 * Mdot * (GM)^0.5 * r^(-3/2)
 		"""
-		return 0.106103 / self.alpha * self._accretion_rate * sqrt(self._GM) * self._length**(-3./2.)
+		return 0.106103 / self.gamma / self.alpha * self._accretion_rate * sqrt(self._GM) * self._length**(-3./2.)
 
 	@property
 	def _midplane_temperature(self) -> float:
@@ -118,7 +123,7 @@ class ShakuraSunyaevDisk(NamedTuple):
 		   T = (3 / 32 / pi^2)^(1/5) * (mp * kappa / kb / sigmab)^(1/5) 
 		        * alpha^(-1/5) * (GM)^(3/10) * Mdot^(2/5) * r^(-9/10)
 		"""
-		t0 = 0.394035 * (cgs['mp'] * cgs['kappa'] / cgs['kb'] / cgs['sigmab'])**(1./5.)
+		t0 = 0.394035 * (cgs['mp'] * cgs['kappa'] / cgs['kb'] / cgs['sigmab'])**(1./5.) * self.gamma**(-1./5.)
 		return t0 * self.alpha**(-1./5.) * self._GM**(3./10.) * self._accretion_rate**(2./5.) * self._length**(-9./10.)
 
 	# -------------------------------------------------------------------------
@@ -140,7 +145,8 @@ class ShakuraSunyaevDisk(NamedTuple):
 		return cgs['kappa'] * self._surface_density * r**(-3./5.)
 
 	# -------------------------------------------------------------------------
-	def cooling_coefficient(self, gamma:float=5./3.) -> float:
+	@property
+	def cooling_coefficient(self) -> float:
 		"""
 		Assumes avg fluid particle mass is the proton mass
 	
@@ -156,7 +162,7 @@ class ShakuraSunyaevDisk(NamedTuple):
 		kb_code = cgs['kb'] / (self._mass * self._length**2 / self._time**2)
 		kappa_code  = cgs['kappa'] / (self._length**2 / self._mass)
 		sigmab_code = cgs['sigmab'] / (self._mass / self._time**3)	
-		qdot_coeff = 8. / 3. * sigmab_code / kappa_code * (mp_code / kb_code)**4 * (gamma - 1.)**4
+		qdot_coeff = 8. / 3. * sigmab_code / kappa_code * (mp_code / kb_code)**4 * (self.gamma - 1.)**4
 		logger.info(f"density coefficient : {self.surface_density_coefficient:0.2e}")
 		logger.info(f"pressure coefficient : {self.surface_pressure_coefficient:0.2e}")
 		logger.info(f"implied eddington fraction : {self._eddington_fraction:0.2e}")
@@ -187,14 +193,13 @@ def gamma_law_index(beta, gamma_law_index_gas):
 	"""
 	return beta + (4-3*beta)**2 * (gamma_law_index_gas-1) / ( beta + 12 * (gamma_law_index_gas-1) * (1-beta) )
 
-def EffectiveTemperature(Sigma, kappa, T):
+def EffectiveTemperature(optical_depth, T):
 	"""
 	When we obtain a solution in the midplane, we need to note that the disk is cooling 
 	throught the surface by sigma * Teff ^4. This surface, (or effective) temperature is is used
 	to calculate the energy being radiated away from the surface. Consistenly solving the vertical 
 	energy flux would require more sophisticated 3D modelling.
 	""" 
-	optical_depth = kappa * Sigma
 	return T * (4./3./optical_depth)**0.25
 
 # Precompute the fixed values for the infrared and optical bands
@@ -214,7 +219,9 @@ def InfaredEmission(temperature, dx):
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
-	return np.pi * dx**2 * prefactor * integral
+	# Note: We do not include the code unit area of the cell. This appears
+	#       later in  
+	return np.pi * dx**2 * prefactor * integral 
 
 def OpticalEmission(temperature, dx):
 	x_low  = cgs['h_over_kb'] * nu_optical_low  / temperature
@@ -243,6 +250,7 @@ if __name__ == '__main__':
         	length_scale_pc   = 9.7e-4,
         	mach_number_3a    = 21,
         	alpha             = 0.1,
+			gamma             = 5./3.
         )
 	print("fedd : ", ss._eddington_fraction)
 
