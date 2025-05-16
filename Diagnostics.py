@@ -43,25 +43,26 @@ class DavidTimeseries:
         self.time            = np.array([s[ 0] for s in ts])
         self.semimajor_axis  = np.array([s[ 1] for s in ts])
         self.eccentricity    = np.array([s[ 2] for s in ts])
-        self.energy          = np.array([s[ 3] for s in ts])
-        self.Accreted_energy = np.array([s[ 4] for s in ts])
+        self.density_floor   = np.array([s[ 3] for s in ts])
+        self.pressure_floor  = np.array([s[ 4] for s in ts])
+        self.Accreted_energy = np.array([s[ 5] for s in ts])
 
-        self.optical         = np.array([s[ 5] for s in ts])
-        self.infared         = np.array([s[ 6] for s in ts])
+        self.optical         = np.array([s[ 6] for s in ts])
+        self.infared         = np.array([s[ 7] for s in ts])
+        self.bolometric      = np.array([s[ 8] for s in ts])
+        self.uncounted_cells = np.array([s[ 9] for s in ts])
 
-        self.mdot1           = np.array([s[ 7] for s in ts])
-        self.mdot2           = np.array([s[ 8] for s in ts])
-        self.torque_g        = np.array([s[ 9] for s in ts])
-        self.torque_a        = np.array([s[10] for s in ts])
-        self.power_g1        = np.array([s[11] for s in ts])
-        self.power_g2        = np.array([s[12] for s in ts])
-        self.power_a1        = np.array([s[13] for s in ts])
-        self.power_a2        = np.array([s[14] for s in ts])
-        self.jdisk           = np.array([s[15] for s in ts])
-        #self.floor           = np.array([s[16] for s in ts])
+        self.mdot1           = np.array([s[10] for s in ts])
+        self.mdot2           = np.array([s[11] for s in ts])
+        self.torque_g        = np.array([s[12] for s in ts])
+        self.torque_a        = np.array([s[13] for s in ts])
+        self.power_g1        = np.array([s[14] for s in ts])
+        self.power_g2        = np.array([s[15] for s in ts])
+        self.power_a1        = np.array([s[16] for s in ts])
+        self.power_a2        = np.array([s[17] for s in ts])
+        self.jdisk           = np.array([s[18] for s in ts])
         
-
-            
+        
 
     @property
     def dt(self):
@@ -174,7 +175,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 20.
+    Number_of_Orbits    = 10.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -185,7 +186,12 @@ if __name__ == '__main__':
 
     if args.FloorCount:
         plt.figure()
-        plt.plot(ts.time, ts.floor, c = 'black', label = r'$N_\mathrm{cells}$ at floor')     
+        plt.plot(ts.time, ts.density_floor, c = 'black', label = r'$N_\mathrm{cells}$ at density floor')     
+        plt.plot(ts.time, ts.pressure_floor, c = 'black', linestyle ='dashed', label = r'$N_\mathrm{cells}$ at pressure floor')     
+        plt.plot(ts.time, ts.uncounted_cells, c = 'red', label = r'$N_\mathrm{cells}$ ignored by lightcurves') 
+        
+        
+        
         plt.xlabel('time')
         plt.legend()
         try:
@@ -194,16 +200,18 @@ if __name__ == '__main__':
         except:
             plt.show()
 
-        print("Nu",ts.floor)
+        #print("Nu",ts.floor)
     
     if args.Lightcurves:
-        plt.figure()
-        plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'black', label = 'infared luminosity')
+        plt.figure(figsize = (10,3))
+        plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'red', label = 'infared luminosity')
         plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
+        print(chkpt['model_parameters']['init_eccentricity'])
+       #plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity')
         #
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
-        plt.ylim([0,1e40])
+        plt.ylim([10e42,20e42])
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)
