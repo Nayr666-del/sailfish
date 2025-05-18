@@ -448,7 +448,7 @@ class Solver(SolverBase):
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
-                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma)
+                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma)
             else:
                 print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             

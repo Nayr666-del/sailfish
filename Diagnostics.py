@@ -16,7 +16,6 @@ class FixNumpyCoreUnpickler(pk.Unpickler):
         return super().find_class(module, name)
 
 
-
 def load_checkpoint(filename, require_solver=None):
     with open(filename, "rb") as f:
         chkpt = FixNumpyCoreUnpickler(f).load()
