@@ -14,6 +14,7 @@ from sailfish.solvers import (
     make_solver,
 )
 
+
 logger = getLogger(__name__)
 user_build_config = dict()
 
@@ -142,7 +143,7 @@ def update_where_none(new, old, frozen=[]):
 
 def clean_state(state):
     saved_model_parameters = state
-    for key in ['semi_major_axis_list', 'eccentricity_list', 'inspiral_time_list', 'Fixed_Phases']:
+    for key in ['semi_major_axis_list', 'eccentricity_list', 'inspiral_time_list', 'Eccentric_Anomalies']:
         if key in saved_model_parameters:
             del saved_model_parameters[key]
     return saved_model_parameters
@@ -187,15 +188,17 @@ def write_checkpoint(number, outdir, state):
         pickle.dump(state_checkpoint_dict, chkpt)
 
 
-def load_checkpoint(chkpt_file):
-    """
-    Load the simulation state from a pickle file.
-    """
-    try:
-        with open(chkpt_file, "rb") as file:
-            return pickle.load(file)
-    except FileNotFoundError:
-        raise ConfigurationError(f"could not open checkpoint file {chkpt_file}")
+class FixNumpyCoreUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if module.startswith("numpy._core"):
+            module = module.replace("numpy._core", "numpy.core")
+        return super().find_class(module, name)
+
+
+def load_checkpoint(filename, require_solver=None):
+    with open(filename, "rb") as f:
+        chkpt = FixNumpyCoreUnpickler(f).load()
+    return chkpt
 
 
 
@@ -472,6 +475,7 @@ def simulate(driver):
     for name, event in driver.events.items():
         logger.info(f"recurrence for {name} event is {event}")
 
+    logger.info(f"Inspiral timescale is {driver.model_parameters['gw_inspiral_time']/2/3.14159265359:0.2f} orbits")
     logger.info(f"run until t={end_time}")
     logger.info(f"CFL number is {cfl_number}")
     logger.info(f"simulation time / user time is {reference_time:0.4f}")
@@ -488,8 +492,8 @@ def simulate(driver):
         driver.model_parameters['semi_major_axis_list'] = []
         driver.model_parameters['eccentricity_list']    = []
         driver.model_parameters['inspiral_time_list']   = []
-        driver.model_parameters['Fixed_Phases']         = []
-        
+        driver.model_parameters['Eccentric_Anomalies']  = []
+
         return DriverState(
             iteration=iteration,
             driver=driver,
@@ -534,22 +538,22 @@ def simulate(driver):
         main_logger.info(
             f"[{iteration:04d}] t={user_time:0.3f} dt={dt:.3e} Mzps={Mzps:.3f}"
         )
-        if ((driver.setup_name == 'cool-inspiral') or  (driver.setup_name == 'binary-inspiral')) & (iteration % 100 == 0):
-            OEI = setup.Orbital_Elements_for_Inspiral(siml_time)
+        if ((driver.setup_name == 'cool-inspiral') or  (driver.setup_name == 'binary-inspiral')) & (iteration % (fold*10) == 0):
             
-
-            if OEI != 'Merged':
-                ab = OEI[0]
-                eb = OEI[1]
+            Live_Orbital_Elements = setup.orbital_elements(siml_time)
+            if Live_Orbital_Elements != 'Merged':
+                ab = Live_Orbital_Elements.semimajor_axis
+                eb = Live_Orbital_Elements.eccentricity
 
                 nrg = ab * driver.model_parameters["init_separation_rg"]
                 main_logger.info(
-                    f"[orbit] a={ab:0.2f}  e={eb:.2f}  nrg={nrg:.2f}"
+                    f"[orbit] a={ab:0.2f}a0  e={eb:.2f}  nrg={nrg:.2f}"
                 )
 
             else:
+                t_since_merge = (siml_time - driver.model_parameters['gw_inspiral_time'] - 2* 3.14159265359 * driver.model_parameters["inspiral_start_time"])/2/3.14159265359
                 main_logger.info(
-                    f"[orbit] a={0.:0.2f}  e={0.:.2f}  nrg={0.:.2f}  Post Merger"
+                    f"[Post-Merger] t_since_merge={t_since_merge:0.2f}"
                 )
 
     yield "end", None, grab_state()
@@ -865,47 +869,60 @@ def main():
                 setup = SetupBase.find_setup_class(driver.setup_name)(
                     **driver.model_parameters or dict()
                 )
+                if (driver.setup_name == 'cool-inspiral') or (driver.setup_name == 'binary-inspiral'):
+                    Inspiral_Flag = True
+                else: 
+                    Inspiral_Flag = False
             else:
                 import pickle as pk
                 with open(driver.chkpt_file, "rb") as file:
                     chkpt = pk.load(file)
 
-            if (driver.setup_name == 'cool-inspiral') or (driver.setup_name == 'binary-inspiral') or (chkpt["setup_name"] == 'cool-inspiral') or (chkpt["setup_name"] == 'binary-inspiral'):
+                if (chkpt["setup_name"] == 'cool-inspiral') or (chkpt["setup_name"] == 'binary-inspiral'):
+                    Inspiral_Flag = True
+                else: 
+                    Inspiral_Flag = False
+
+            if Inspiral_Flag:
 
                 from sailfish.physics.Peters_Inspiral import Orbital_Inspiral
 
                 Inspiral_Model_Parameters = driver.model_parameters
                 speed_of_light            = Inspiral_Model_Parameters["init_separation_rg"]**0.5
 
+                from numpy import pi, sqrt, cumsum, round, linspace
+                from scipy.optimize import newton
+
                 def Integrate_Inspiral(a0):
-                    Peters_OI = Orbital_Inspiral(GM=Inspiral_Model_Parameters["GM"],
-                        mass_ratio=Inspiral_Model_Parameters["mass_ratio"],
-                        speed_of_light=speed_of_light,
-                        eccentricity0=Inspiral_Model_Parameters["init_eccentricity"],
-                        SemiMajorAxis0=a0,
-                        timestep=Inspiral_Model_Parameters["integration_timestep"],
-                        plot_inspiral=False)
+                    Peters_OI = Orbital_Inspiral(
+                        GM                 = Inspiral_Model_Parameters["GM"],
+                        mass_ratio         = Inspiral_Model_Parameters["mass_ratio"],
+                        speed_of_light     = speed_of_light,
+                        init_eccentricity  = Inspiral_Model_Parameters["init_eccentricity"],
+                        init_semimajoraxis = a0,
+                        timestep           = Inspiral_Model_Parameters["integration_timestep"],
+                        plot_inspiral      = False
+                        )
+                    
+                    Mean_Anomaly_Input      = list(cumsum([sqrt(Inspiral_Model_Parameters["GM"] / Peters_OI.a_array[i] / Peters_OI.a_array[i] / Peters_OI.a_array[i]) for i in range(0,len(Peters_OI.a_array))]) * driver.model_parameters["integration_timestep"])
+                    EccentricAnomaly_Output = [Peters_OI.EccentricAnomaly_from_MeanAnomaly(Mean_Anomaly_Input[i],Peters_OI.e_array[i]) for i in range(0,len(Peters_OI.e_array))]
 
                     Inspiral_Dict = {
                     "TimeDomain":Peters_OI.TimeDomain,
                     "SemiMajorAxis":Peters_OI.a_array,
                     "Eccentricity":Peters_OI.e_array,
+                    "Eccentric_Anomalies":EccentricAnomaly_Output
                     }
-
+    
                     return Inspiral_Dict
 
                 Integrated_Orbit = Integrate_Inspiral(1.)
 
-                from numpy import pi, sqrt, cumsum, round
-
-                FixedPhases___ = list(cumsum([sqrt(Inspiral_Model_Parameters["GM"] / Integrated_Orbit["SemiMajorAxis"][i] / Integrated_Orbit["SemiMajorAxis"][i] / Integrated_Orbit["SemiMajorAxis"][i]) for i in range(0,len(Integrated_Orbit["SemiMajorAxis"]))]) * driver.model_parameters["integration_timestep"])
-
                 driver.model_parameters["semi_major_axis_list"] = Integrated_Orbit["SemiMajorAxis"]
                 driver.model_parameters["eccentricity_list"]    = Integrated_Orbit["Eccentricity"]
                 driver.model_parameters["inspiral_time_list"]   = list(Integrated_Orbit["TimeDomain"])
-                driver.model_parameters["Fixed_Phases"]         = FixedPhases___
-                driver.model_parameters["gw_inspiral_time"]     = float(round(Integrated_Orbit["TimeDomain"][-1],1))
-                
+                driver.model_parameters["gw_inspiral_time"]     = float(round(Integrated_Orbit["TimeDomain"][-1],4))
+                driver.model_parameters["Eccentric_Anomalies"]  = Integrated_Orbit["Eccentric_Anomalies"] 
 
 
 
