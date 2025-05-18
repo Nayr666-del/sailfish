@@ -30,7 +30,7 @@ def file_load(indir, movie_outdir, savefigbool, filename):
 
     frame_list        = []
     Path('{}/output-figures'.format(current_path_name)).mkdir(parents=True, exist_ok=True)
-    """
+    
     for name in sorted(Path(indir).iterdir()):
         file_count += 1
 
@@ -53,7 +53,7 @@ def file_load(indir, movie_outdir, savefigbool, filename):
         
         SavedFileName  = f"DensityMap-{int(CurrentTime * 100):05d}.png"
         frame_list.append(SavedFileName)
-    """    
+        
 
     with open("output-figures/frames.txt", "w") as f:
         for fname in frame_list:
