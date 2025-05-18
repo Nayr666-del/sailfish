@@ -1,5 +1,5 @@
 import argparse
-import pickle
+import pickle as pk
 import sys
 from sailfish.physics.kepler import OrbitalState
 import matplotlib.pyplot as plt
@@ -10,17 +10,18 @@ import sailfish
 
 sys.path.insert(1, ".")
 
+class FixNumpyCoreUnpickler(pk.Unpickler):
+    def find_class(self, module, name):
+        if module.startswith("numpy._core"):
+            module = module.replace("numpy._core", "numpy.core")
+        return super().find_class(module, name)
+
+
 
 def load_checkpoint(filename, require_solver=None):
-    with open(filename, "rb") as file:
-        chkpt = pickle.load(file)
-
-        if require_solver is not None and chkpt["solver"] != require_solver:
-            raise ValueError(
-                f"checkpoint is from a run with solver {chkpt['solver']}, "
-                f"expected {require_solver}"
-            )
-        return chkpt
+    with open(filename, "rb") as f:
+        chkpt = FixNumpyCoreUnpickler(f).load()
+    return chkpt
 
 
 def main_srhd_1d():
@@ -877,8 +878,6 @@ def main_cbdgam_2d():
             alpha             = chkpt['model_parameters']['alpha'],
             gamma             = gamma
             )
-        
-        
 
         if args.field == 't':
             Sigma    = fields["sigma"](prim)
@@ -951,25 +950,46 @@ def main_cbdgam_2d():
             print('------------------------------------------')
 
     if args.plot_sink:
+        from sailfish.physics.kepler import OrbitalState, PointMass
+        from matplotlib.patches import Circle
+
         primary, secondary = chkpt['point_masses']
+        Primary   = PointMass(primary.mass  , primary.position_x  , primary.position_y  , primary.velocity_x  , primary.velocity_y)
+        Secondary = PointMass(secondary.mass, secondary.position_x, secondary.position_y, secondary.velocity_x, secondary.velocity_y)
+
+        orbital_state = OrbitalState(Primary, Secondary)
 
         ax.scatter(primary.position_x, primary.position_y, marker = '+', s = 40, c = 'white', label = 'Point Mass')
         ax.scatter(secondary.position_x, secondary.position_y, marker = '+', s = 40, c = 'white')
 
-        from matplotlib.patches import Circle
+        
         primarycenter   = (primary.position_x, primary.position_y)
         secondarycenter = (secondary.position_x, secondary.position_y)
         radius          = primary.sink_radius         # Radius of the circle
 
-        primarysink   = Circle(primarycenter, radius, color='white', fill=True, alpha=0.7)
-        secondarysink = Circle(secondarycenter, radius, color='white', fill=True, alpha=0.7)
+        primarysink   = Circle(primarycenter, radius, color='grey', fill=True, alpha=0.8)
+        secondarysink = Circle(secondarycenter, radius, color='grey', fill=True, alpha=0.8)
         ax.add_patch(primarysink)
         ax.add_patch(secondarysink)
+
+        def Position(t, a, e):
+            return 0.5 * a * np.cos(t) - 0.5 * a * e, 0.5 * a * np.sqrt(1 - e**2) * np.sin(t)
+        
+        eccentr = chkpt['timeseries'][-1][ 2] 
+        semimaj = chkpt['timeseries'][-1][ 1] 
+        #eccentr = chkpt['timeseries'].eccentricity[-1]
+        Orbital_Path = np.array([Position(t, semimaj, eccentr) for t in np.linspace(0,2*np.pi,1000)])
+        # USE  TIMESERIES DATA TO GET A AND E AND USE THIS TO PLOT
+        plt.plot( Orbital_Path[:,0], Orbital_Path[:,1], linestyle = 'dashed', c = 'grey')
+        plt.plot(-Orbital_Path[:,0], Orbital_Path[:,1], linestyle = 'dashed', c = 'grey')
 
     if args.Outputs is None:
         plt.show()
     else:
-        pngname     = args.Outputs + f"{'/DensityMap'}.{int(100*CurrentTime)}.png"
+        #pngname     = args.Outputs + f"{'/DensityMap'}.{int(100*CurrentTime)}.png"
+        
+        pngname     = args.Outputs + f"/DensityMap-{int(CurrentTime * 100):05d}.png"
+        
         fig.savefig(pngname, dpi=400)
 
 
