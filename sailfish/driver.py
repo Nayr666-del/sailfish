@@ -187,6 +187,10 @@ def write_checkpoint(number, outdir, state):
         logger.info(f"write checkpoint {chkpt.name}")
         pickle.dump(state_checkpoint_dict, chkpt)
 
+"""
+Legacy changes. Older versions of np (as required by cupy) will cause errors
+when loading checkpoints.
+"""
 
 class FixNumpyCoreUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
@@ -874,9 +878,7 @@ def main():
                 else: 
                     Inspiral_Flag = False
             else:
-                import pickle as pk
-                with open(driver.chkpt_file, "rb") as file:
-                    chkpt = pk.load(file)
+                chkpt = load_checkpoint(driver.chkpt_file)
 
                 if (chkpt["setup_name"] == 'cool-inspiral') or (chkpt["setup_name"] == 'binary-inspiral'):
                     Inspiral_Flag = True
