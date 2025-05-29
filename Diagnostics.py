@@ -60,6 +60,8 @@ class DavidTimeseries:
         self.power_a1        = np.array([s[16] for s in ts])
         self.power_a2        = np.array([s[17] for s in ts])
         self.jdisk           = np.array([s[18] for s in ts])
+        self.uv              = np.array([s[19] for s in ts])
+        self.xray            = np.array([s[19] for s in ts])
         
         
 
@@ -185,9 +187,9 @@ if __name__ == '__main__':
 
     if args.FloorCount:
         plt.figure()
-        plt.plot(ts.time, ts.density_floor, c = 'black', label = r'$N_\mathrm{cells}$ at density floor')     
-        plt.plot(ts.time, ts.pressure_floor, c = 'black', linestyle ='dashed', label = r'$N_\mathrm{cells}$ at pressure floor')     
-        plt.plot(ts.time, ts.uncounted_cells, c = 'red', label = r'$N_\mathrm{cells}$ ignored by lightcurves') 
+        plt.plot(ts.time[-len(Final_Orbits):], ts.density_floor[-len(Final_Orbits):], c = 'black', label = r'$N_\mathrm{cells}$ at density floor')     
+        plt.plot(ts.time[-len(Final_Orbits):], ts.pressure_floor[-len(Final_Orbits):], c = 'black', linestyle ='dashed', label = r'$N_\mathrm{cells}$ at pressure floor')     
+        plt.plot(ts.time[-len(Final_Orbits):], ts.uncounted_cells[-len(Final_Orbits):], c = 'red', label = r'$N_\mathrm{cells}$ ignored by lightcurves') 
         
         
         
@@ -205,12 +207,15 @@ if __name__ == '__main__':
         plt.figure(figsize = (10,3))
         plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'red', label = 'infared luminosity')
         plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
-        print(chkpt['model_parameters']['init_eccentricity'])
+        plt.plot(Final_Orbits, ts.uv[-len(Final_Orbits):], c = 'purple', label = 'uv')
+        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray')
+        
        #plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity')
         #
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
-        plt.ylim([10e42,20e42])
+        #plt.ylim([6e42,14e42])
+        plt.ylim([1e38,1e42])
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)

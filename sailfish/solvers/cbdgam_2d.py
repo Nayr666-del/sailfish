@@ -15,7 +15,7 @@ from sailfish.physics.circumbinary import (
 )
 from sailfish.solver_base import SolverBase
 from sailfish.subdivide import subdivide, to_host, concat_on_host, lazy_reduce
-from cooling import OpticalEmission, InfaredEmission, cgs, EffectiveTemperature
+from cooling import OpticalEmission, InfaredEmission, UVEmission, XrayEmission, cgs, EffectiveTemperature
 import numpy as np
 import warnings
 
@@ -292,6 +292,8 @@ class Solver(SolverBase):
         self.buffer_onset_width = 0.1
         self.infared_cache = None
         self.optical_cache = None
+        self.uv_cache      = None
+        self.xray_cache    = None
 
         if solution is None:
             primitive = initial_condition(setup, mesh, time)
@@ -388,7 +390,19 @@ class Solver(SolverBase):
         else:
             pass
 
-        return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache)]
+        if self.uv_cache is None:
+            uv_emission   = UVEmission(Temperature_Range, self.Length_Scale_CGS)
+            self.uv_cache = uv_emission
+        else:
+            pass
+
+        if self.xray_cache is None:
+            xray_emission   = XrayEmission(Temperature_Range, self.Length_Scale_CGS)
+            self.xray_cache = xray_emission
+        else:
+            pass
+
+        return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache), np.asarray(self.uv_cache), np.asarray(self.xray_cache)]
 
 
     def detect_density_floor(self, patch):
@@ -407,6 +421,8 @@ class Solver(SolverBase):
         Precomputed      = list(Precomputed)
         Precomputed[2]   = self.xp.asarray(Precomputed[2])
         Precomputed[3]   = self.xp.asarray(Precomputed[3])
+        Precomputed[4]   = self.xp.asarray(Precomputed[4])
+        Precomputed[5]   = self.xp.asarray(Precomputed[5])
         Precomputed_low  = self.xp.log10(Precomputed[0][0])
         Precomputed_high = self.xp.log10(Precomputed[0][-1])
 
@@ -418,7 +434,7 @@ class Solver(SolverBase):
         RescaledTemp          = Teff * self.setup.AccretionRateRescaling ** 0.25
         Bolometric_Luminosity = 2 * cgs['sigmab'] * RescaledTemp ** 4 * self.Length_Scale_CGS**2
 
-        transparent_mask = (optical_depth >= 1.0)#.astype(self.xp.float64)
+        transparent_mask = (optical_depth >= 1.0 / self.setup.AccretionRateRescaling)#.astype(self.xp.float64)
         mask_all_vals_if = (RescaledTemp * transparent_mask >= 1.01)#.astype(self.xp.float64)
         # High temp cutoff??
 
@@ -431,15 +447,24 @@ class Solver(SolverBase):
             Optical_N1 = self.xp.take(Precomputed[2],N0+1,axis=0)
             Infared_N0 = self.xp.take(Precomputed[3],N0  ,axis=0)
             Infared_N1 = self.xp.take(Precomputed[3],N0+1,axis=0)
+            UV_N0      = self.xp.take(Precomputed[4],N0  ,axis=0)
+            UV_N1      = self.xp.take(Precomputed[4],N0+1,axis=0)
+            Xray_N0    = self.xp.take(Precomputed[5],N0  ,axis=0)
+            Xray_N1    = self.xp.take(Precomputed[5],N0+1,axis=0)
 
             Interpolated_Optical = Optical_N0 + Bracket_N0_N1 * (Optical_N1-Optical_N0)
             Interpolated_Infared = Infared_N0 + Bracket_N0_N1 * (Infared_N1-Infared_N0)
+            Interpolated_UV      = UV_N0      + Bracket_N0_N1 * (UV_N1-UV_N0)
+            Interpolated_Xray    = Xray_N0    + Bracket_N0_N1 * (Xray_N1-Xray_N0)
 
             Interpolated_Optical  *= mask_all_vals_if
             Interpolated_Infared  *= mask_all_vals_if
+            Interpolated_UV       *= mask_all_vals_if
+            Interpolated_Xray     *= mask_all_vals_if
             Bolometric_Luminosity *= mask_all_vals_if
 
-            return Interpolated_Optical, Interpolated_Infared, Bolometric_Luminosity, sum(~mask_all_vals_if)
+            #return Interpolated_Optical, Interpolated_Infared, Bolometric_Luminosity, sum(~mask_all_vals_if)
+            return Interpolated_Infared, Interpolated_Optical, Interpolated_UV, Interpolated_Xray, Bolometric_Luminosity, sum(~mask_all_vals_if)
         
         except IndexError as e:
             if self.xp.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
@@ -453,17 +478,23 @@ class Solver(SolverBase):
                 print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             
 
-    def optical_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[0]
-
     def infared_luminosity(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[0]
+    
+    def optical_luminosity(self,patch):
         return self.Interpolate_Band_Luminosity(patch)[1]
     
-    def bolometric_luminosity(self,patch):
+    def uv_luminosity(self,patch):
         return self.Interpolate_Band_Luminosity(patch)[2]
     
+    def xray_luminosity(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[3]
+    
+    def bolometric_luminosity(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[4]
+    
     def Uncounted_Cells(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[3].sum()
+        return self.Interpolate_Band_Luminosity(patch)[5].sum()
     
 
     def reductions(self):
@@ -580,6 +611,14 @@ class Solver(SolverBase):
                     
                     elif d.quantity == "infared":
                         f = self.infared_luminosity(p)
+                        result.append(f.sum())
+
+                    elif d.quantity == "uv":
+                        f = self.uv_luminosity(p)
+                        result.append(f.sum())
+
+                    elif d.quantity == "xray":
+                        f = self.xray_luminosity(p)
                         result.append(f.sum())
 
                     elif d.quantity == "bolometric":

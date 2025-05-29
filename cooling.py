@@ -209,6 +209,22 @@ nu_infared_high = cgs['c'] / (7e-5)    # 700 nm = 7e-5 cm
 nu_optical_low  = cgs['c'] / (7e-5)    # 700 mm = 7e-5 cm
 nu_optical_high = cgs['c'] / (4e-5)    # 400 nm = 4e-5 cm
 
+nu_UV_low       = cgs['c'] / (4e-5)
+nu_UV_high      = cgs['c'] / (1e-6)
+
+nu_Xray_low     = cgs['c'] / (1e-6)
+nu_Xray_high    = cgs['c'] / (1e-9)
+
+def Energy_to_wavelength(E):
+	return (cgs['h'] * cgs['c']) / E 
+
+def Wavelength_to_energy(L):
+	return (cgs['h'] * cgs['c']) / L 
+
+ev = 1/624150907446
+#print('wavelength',Energy_to_wavelength(124000 * ev))
+
+
 def InfaredEmission(temperature, dx):
 	x_low  = cgs['h_over_kb'] * nu_infared_low  / temperature
 	x_high = cgs['h_over_kb'] * nu_infared_high / temperature
@@ -236,9 +252,30 @@ def OpticalEmission(temperature, dx):
 	return np.pi * dx**2 * prefactor * integral
 
 
+def UVEmission(temperature, dx):
+	x_low  = cgs['h_over_kb'] * nu_UV_low  / temperature
+	x_high = cgs['h_over_kb'] * nu_UV_high / temperature
+
+	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
+
+	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integral  = np.trapz(integrand, x_grid, axis = 0)
+
+	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
+	return np.pi * dx**2 * prefactor * integral 
 
 
+def XrayEmission(temperature, dx):
+	x_low  = cgs['h_over_kb'] * nu_Xray_low  / temperature
+	x_high = cgs['h_over_kb'] * nu_Xray_high / temperature
 
+	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
+
+	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integral  = np.trapz(integrand, x_grid, axis = 0)
+
+	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
+	return np.pi * dx**2 * prefactor * integral 
 
 if __name__ == '__main__':
 	import numpy as np
