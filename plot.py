@@ -894,6 +894,24 @@ def main_cbdgam_2d():
             RescaledTemp  = Teff * (10/EddingtonFrac) ** 0.25
             f             = RescaledTemp
             
+
+        elif args.field == 'tau':
+            Sigma    = fields["sigma"](prim) 
+            #Pressure = fields["pre"](prim)
+
+            kb_code    = cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
+            mp_code    = cgs['mp'] / (SS73._mass)
+            kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
+
+            #Midplane_T    = ((Pressure / Sigma) * (mp_code / kb_code)).T
+            #optical_depth = Sigma * kappa_code
+            #Teff          = EffectiveTemperature(optical_depth, Midplane_T)
+            #EddingtonFrac = SS73._eddington_fraction
+            #RescaledTemp  = Teff * (10/EddingtonFrac) ** 0.25
+
+            f         = Sigma * kappa_code * 1.0 / (10 / SS73._eddington_fraction)
+
+            print('Minimum Density', 10 / kappa_code)
             #Tmid = 10 **-2 * mp_code/kb_code
             #kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
             #Teff = cooling.EffectiveTemperature(1e-10, kappa_code, Tmid)
