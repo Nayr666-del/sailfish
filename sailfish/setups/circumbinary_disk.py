@@ -1027,14 +1027,14 @@ class CoolInspiral(SetupBase):
             primitive[0] = (
                 self.initial_sigma
                 * r_softened ** (-3.0 / 5.0)
-                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+                * (0.0001 + 0.9999 * exp(-((2.0 / r_softened) ** 30)))
             )
             primitive[1] = sqrt(self.GM / r_softened) * phi_hat_x
             primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y
             primitive[3] = (
                 self.initial_pressure
                 * r_softened ** (-3.0 / 2.0)
-                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+                * (0.0001 + 0.9999 * exp(-((2.0 / r_softened) ** 30)))
             )
 
     def mesh(self, resolution):
@@ -1086,6 +1086,8 @@ class CoolInspiral(SetupBase):
                 dict(quantity="power" ,which_mass=1,accretion=True),
                 dict(quantity="power" ,which_mass=2,accretion=True),
                 dict(quantity="angular_momentum"),
+                dict(quantity="uv"),
+                dict(quantity="xray"),
                 
                 #dict(quantity="eccentricity_vector", radial_cut=(1.0, 6.0)),
                 #dict(quantity="torque",which_mass='both',gravity=True, radial_cut=(0.0, 1.0)),
