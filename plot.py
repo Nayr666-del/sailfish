@@ -870,10 +870,15 @@ def main_cbdgam_2d():
         from cooling import gamma_law_index, EffectiveTemperature, cgs
 
         gamma = gamma_law_index(chkpt['model_parameters']['beta'], chkpt['model_parameters']['gamma_law_index_gas'])
+        try:
+            length_scale_pc = chkpt['model_parameters']['length_scale_pc']
+        except KeyError as e:
+            r_g             = cgs['G'] * chkpt['model_parameters']['central_mass_msun'] * cgs['msun'] / cgs['c'] / cgs['c']
+            length_scale_pc = r_g * chkpt['model_parameters']['init_separation_rg'] / cgs['pc']
 
         SS73 = cooling.ShakuraSunyaevDisk(
             central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
-            length_scale_pc   = chkpt['model_parameters']['length_scale_pc'],
+            length_scale_pc   = length_scale_pc,
             mach_number_3a    = chkpt['model_parameters']['mach_number_3a'],
             alpha             = chkpt['model_parameters']['alpha'],
             gamma             = gamma

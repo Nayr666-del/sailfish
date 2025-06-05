@@ -953,7 +953,7 @@ class CoolInspiral(SetupBase):
 
     # Cooling specific parameters
     central_mass_msun    = param(8e6, "Mass of the central object in solar masses")
-    length_scale_pc      = param(9.7e-4, "Length scale in parsecs") # Correct this for inspirals (rgrav not pc)
+    semimajoraxis_pc     = param(None, "Length scale in parsecs") # Correct this for inspirals 
     mach_number_3a       = param(21, "Disk Mach number just outside cavity") 
     # Radiation Pressure Contribution (Optional)
     beta                 = param(1., "Gas pressure fraction P_gas/P_tot where P_tot = P_gas+P_rad") 
@@ -970,6 +970,19 @@ class CoolInspiral(SetupBase):
 
     a0 = 1.0
     GM = 1.0
+
+    @property
+    def Gravitational_Radius_pc(self):
+        from cooling import cgs
+        return cgs['G'] * self.central_mass_msun * cgs['msun'] / cgs['c'] / cgs['c'] / cgs['pc']
+
+    @property
+    def length_scale_pc(self):
+        r_g = self.Gravitational_Radius_pc
+        if self.semimajoraxis_pc is None:
+            return r_g * self.init_separation_rg  
+        else:
+            return self.length_scale_pc
 
     @property
     def is_isothermal(self):
