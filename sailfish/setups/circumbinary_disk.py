@@ -943,8 +943,8 @@ class CoolInspiral(SetupBase):
     softening_length     = param(0.03, "gravitational softening length", mutable=True)
     buffer_is_enabled    = param(True, "whether the buffer zone is enabled", mutable=True)
     sink_model           = param("acceleration_free", "sink [acceleration_free|force_free|torque_free]", mutable=True)
-    initial_sigma        = param(0.057, "initial disk surface density at r=a (gamma-law)")
-    initial_pressure     = param(6.7e-5, "initial disk surface pressure at r=a (gamma-law)")
+    #initial_sigma        = param(0.057, "initial disk surface density at r=a (gamma-law)")
+    #initial_pressure     = param(6.7e-5, "initial disk surface pressure at r=a (gamma-law)")
     alpha                = param(0.1, "alpha-viscosity parameter (gamma-law)")
     gamma_law_index_gas  = param(5.0 / 3.0, "adiabatic index (gamma-law)")
     constant_softening   = param(True, "whether to use constant softening (gamma-law)")
@@ -1036,18 +1036,21 @@ class CoolInspiral(SetupBase):
             primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y * sign
 
         elif self.is_gamma_law:
+            sigma    = self.SS73.surface_density_profile(r_softened)
+            pressure = self.SS73.surface_pressure_profile(r_softened)
+
             # See eq. (A2) from Goodman (2003)
             primitive[0] = (
-                self.initial_sigma
+                sigma
                 * r_softened ** (-3.0 / 5.0)
-                * (0.0001 + 0.9999 * exp(-((2.0 / r_softened) ** 30)))
+                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
             )
             primitive[1] = sqrt(self.GM / r_softened) * phi_hat_x
             primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y
             primitive[3] = (
-                self.initial_pressure
+                pressure
                 * r_softened ** (-3.0 / 2.0)
-                * (0.0001 + 0.9999 * exp(-((2.0 / r_softened) ** 30)))
+                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
             )
 
     def mesh(self, resolution):
