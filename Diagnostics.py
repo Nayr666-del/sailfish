@@ -20,11 +20,6 @@ def load_checkpoint(filename, require_solver=None):
     with open(filename, "rb") as f:
         chkpt = FixNumpyCoreUnpickler(f).load()
     return chkpt
-    #with open(filename, "rb") as file:
-    #    chkpt = pk.load(file)
-    #    return chkpt
-
-
 
 def E_from_M(M, e=1.0):
     f = lambda E: E - e * np.sin(E) - M
@@ -61,7 +56,7 @@ class DavidTimeseries:
         self.power_a2        = np.array([s[17] for s in ts])
         self.jdisk           = np.array([s[18] for s in ts])
         self.uv              = np.array([s[19] for s in ts])
-        self.xray            = np.array([s[19] for s in ts])
+        self.xray            = np.array([s[20] for s in ts])
         
         
 
@@ -176,7 +171,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 10.
+    Number_of_Orbits    = 100.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -208,14 +203,11 @@ if __name__ == '__main__':
         plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'red', label = 'infared luminosity')
         plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
         plt.plot(Final_Orbits, ts.uv[-len(Final_Orbits):], c = 'purple', label = 'uv')
-        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray')
-        
-       #plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity')
-        #
+        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray') 
+        #plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity')
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
-        #plt.ylim([6e42,14e42])
-        plt.ylim([1e38,1e42])
+        plt.yscale('log')
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)
@@ -234,45 +226,6 @@ if __name__ == '__main__':
         except:
             plt.show()
 
-    if args.Energy:
-        import cooling
-
-        Press = chkpt['solution'][...,3]
-        sigma = chkpt['solution'][...,0]
-
-        SS73 = cooling.ShakuraSunyaevDisk(
-            central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
-            length_scale_pc   = chkpt['model_parameters']['length_scale_pc'],
-            mach_number_3a    = chkpt['model_parameters']['mach_number_3a'],
-            alpha             = chkpt['model_parameters']['alpha']
-        )
-        
-        kb_code     = cooling.cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
-        mp_code     = cooling.cgs['mp'] / (SS73._mass)
-        kappa_code  = cooling.cgs['kappa'] / (SS73._length**2 / SS73._mass)
-        sigmab_code = cooling.cgs['sigmab'] / (SS73._mass / SS73._time**3)	
-        mid_T = (mp_code/kb_code) * (Press/sigma)
-
-        eff_T = ((4/3) * mid_T**4 / (sigma * kappa_code))**0.25
-
-        Q_dot = 2*sigmab_code * eff_T ** 4
-        # Keep in code units so multiply this by the area of each cell in code units
-        dx      = chkpt['mesh'].dx
-        Total_E = np.sum(Q_dot) * dx**2
-
-        plt.figure()
-        plt.plot(Final_Orbits, ts.energy[-len(Final_Orbits):], c = 'black', label = 'Total Energy')
-        plt.plot(Final_Orbits, ts.Accreted_energy[-len(Final_Orbits):], c = 'black', label = 'Accreted Energy')
-        #plt.scatter(Final_Orbits[-1], Total_E, marker = "*")
-        plt.xlabel('time')
-        plt.title('Total Energy emitted by disk')
-
-        try:
-            savename = os.getcwd() + "/TotalEnergyEmitted.%04d.png"%(CurrentTime)
-            plt.savefig(savename, dpi=400)
-        except:
-            plt.show()
-        #plt.show()
 
     if args.Torque_Components:
         InnerClipped_Torque = ts.innertorque[-len(Final_Orbits):] / M_dot_0
