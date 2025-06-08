@@ -417,8 +417,7 @@ class Solver(SolverBase):
 
 
     def Interpolate_Band_Luminosity(self, patch):
-        Precomputed      = self.Precompute_Band_Luminosities
-        Precomputed      = list(Precomputed)
+        Precomputed      = list(self.Precompute_Band_Luminosities)
         Precomputed[2]   = self.xp.asarray(Precomputed[2])
         Precomputed[3]   = self.xp.asarray(Precomputed[3])
         Precomputed[4]   = self.xp.asarray(Precomputed[4])
@@ -443,7 +442,7 @@ class Solver(SolverBase):
         Bracket_N0_N1    = Progress - N0
 
         try:
-            Optical_N0 = self.xp.take(Precomputed[2], N0, axis=0)
+            Optical_N0 = self.xp.take(Precomputed[2],N0, axis=0)
             Optical_N1 = self.xp.take(Precomputed[2],N0+1,axis=0)
             Infared_N0 = self.xp.take(Precomputed[3],N0  ,axis=0)
             Infared_N1 = self.xp.take(Precomputed[3],N0+1,axis=0)
