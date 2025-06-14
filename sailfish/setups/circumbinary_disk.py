@@ -1061,7 +1061,24 @@ class CoolInspiral(SetupBase):
 
     @property
     def physics(self):
-        if self.is_gamma_law:
+        if self.is_isothermal:
+            return dict(
+                eos_type=EquationOfState.LOCALLY_ISOTHERMAL,
+                mach_number=self.mach_number_3a,
+                point_mass_function=self.point_masses,
+                buffer_is_enabled=self.buffer_is_enabled,
+                buffer_driving_rate=100.0,
+                buffer_onset_width=1.0,
+                cooling_coefficient=0.0,
+                constant_softening=self.constant_softening,
+                viscosity_model=ViscosityModel.CONSTANT_NU if self.nu > 0.0 else ViscosityModel.NONE,
+                viscosity_coefficient=self.nu,
+                alpha=0.0,
+                diagnostics=self.diagnostics,
+                retrograde=self.retrograde,
+            )
+
+        elif self.is_gamma_law:
             return dict(
                 eos_type=EquationOfState.GAMMA_LAW,
                 gamma_law_index=self.gamma_law_index,
@@ -1077,6 +1094,7 @@ class CoolInspiral(SetupBase):
                 diagnostics=self.diagnostics,
                 retrograde=self.retrograde,
             )
+
 
     @property
     def diagnostics(self):
@@ -1115,7 +1133,11 @@ class CoolInspiral(SetupBase):
                 #dict(quantity="power",which_mass=2,gravity=True, radial_cut=(1.0, 10.0)),
             ]
         else:
-            return []
+            return [
+                dict(quantity="time"),
+                dict(quantity="mdot", which_mass=1, accretion=True),
+                dict(quantity="mdot", which_mass=2, accretion=True),
+            ]
 
     from math import sqrt
     @property
