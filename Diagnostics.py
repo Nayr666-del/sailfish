@@ -171,7 +171,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 100.
+    Number_of_Orbits    = 200.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -202,12 +202,13 @@ if __name__ == '__main__':
         plt.figure(figsize = (10,3))
         plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'red', label = 'infared luminosity')
         plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
-        plt.plot(Final_Orbits, ts.uv[-len(Final_Orbits):], c = 'purple', label = 'uv')
-        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray') 
-        #plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity')
+        plt.plot(Final_Orbits, ts.uv[-len(Final_Orbits):],   c = 'purple', label = 'uv')
+        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray', linewidth = 0.6) 
+        plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity', linewidth = 0.6)
         plt.xlabel('time')
         plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
         plt.yscale('log')
+        plt.ylim([1e38, 1e46])
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)
@@ -228,26 +229,26 @@ if __name__ == '__main__':
 
 
     if args.Torque_Components:
-        InnerClipped_Torque = ts.innertorque[-len(Final_Orbits):] / M_dot_0
-        OuterClipped_Torque = ts.outertorque[-len(Final_Orbits):] / M_dot_0
-        Normalised_Torque_g = ts.torque_g[-len(Final_Orbits):] / M_dot_0
-        Normalised_Torque_a = ts.torque_a[-len(Final_Orbits):] / M_dot_0
+        #InnerClipped_Torque = ts.innertorque[-len(Final_Orbits):] / M_dot_0
+        #OuterClipped_Torque = ts.outertorque[-len(Final_Orbits):] / M_dot_0
+        Normalised_Torque_g = ts.torque_g[-len(Final_Orbits):] #/ M_dot_0
+        Normalised_Torque_a = ts.torque_a[-len(Final_Orbits):] #/ M_dot_0
 
 
         plt.figure()
         plt.xlabel('time')
         if Model_Parameters['retrograde']:
-            plt.title(r'Torque Retrograde $\nu = %g$'%(viscosity))
+            plt.title(r'Torque Retrograde $\alpha = %g$'%(chkpt['model_parameters']['alpha']))
         else:
-            plt.title(r'Torque Prograde $\nu = %g$'%(viscosity))
+            plt.title(r'Torque Prograde $\alpha = %g$'%(chkpt['model_parameters']['alpha']))
         
         MeanTorque_g = [np.mean(Normalised_Torque_g[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))]
         MeanTorque_a = [np.mean(Normalised_Torque_a[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))]
 
         
         #plt.plot(Final_Orbits,Normalised_Torque_g, c = 'blue', linewidth = 0.1)
-        plt.plot(TimeBins[1:],MeanTorque_g,linewidth = 1.5, label = 'Binned Torque Mean Gravitational', c = 'black')
-        plt.plot(TimeBins[1:],MeanTorque_a,linewidth = 1.5, label = 'Binned Torque Mean Accretion',linestyle = 'dashed', c = 'black')
+        plt.plot(TimeBins[1:],MeanTorque_g,linewidth = 0.5, label = 'Binned Torque Mean Gravitational', c = 'black')
+        plt.plot(TimeBins[1:],MeanTorque_a,linewidth = 0.5, label = 'Binned Torque Mean Accretion',linestyle = 'dashed', c = 'black')
         
         #plt.plot(ts.time, ts.jdisk)
         #plt.xlim([CurrentTime-Number_of_Orbits,CurrentTime])
@@ -258,13 +259,13 @@ if __name__ == '__main__':
         #plt.ylim([-2.5,5])
         plt.ylabel(r'$\tau/\dot{M}_0$')
         try:
-            savename = args.Output +  "/MeanTorque.%04d_nu%g.png"%(CurrentTime,viscosity)
+            savename = args.Output +  "/MeanTorque.%04d_alpha%g.png"%(CurrentTime,chkpt['model_parameters']['alpha'])
             plt.savefig(savename, dpi=400)
         except:
             plt.show()
 
 
-        print('Torque Mean at t=1000 is',MeanTorque_g[0]+MeanTorque_a[0])
+        #print('Torque Mean at t=1000 is',MeanTorque_g[0]+MeanTorque_a[0])
 
 
 
@@ -300,10 +301,10 @@ if __name__ == '__main__':
 
 
     if args.Accretion:
-
+        Mean_Norm_Factor = np.array(np.mean(ts.mdot1[-len(Final_Orbits)-100:-len(Final_Orbits)]+ts.mdot2[-len(Final_Orbits)-100:-len(Final_Orbits)]))
         plt.figure()
-        #plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/np.mean(ts.mdot1[-len(Final_Orbits)-100:-len(Final_Orbits)]+ts.mdot2[-len(Final_Orbits)-100:-len(Final_Orbits)]),label='mdot',linewidth = 0.1, c = 'red')
-        plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):]),label='mdot',linewidth = 0.1, c = 'red')
+        plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
+        #plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):]),label='mdot',linewidth = 0.1, c = 'red')
         plt.xlabel('Time [P]')
         plt.ylabel(r'$\dot{M}/\langle\dot{M}_0\rangle$')
         plt.title(r'Accretion Rate e = %g, $\alpha=%g$'%(np.round(OrbitalEccentricity,3),alpha))
@@ -312,7 +313,7 @@ if __name__ == '__main__':
         #plt.ylim([0,2])
         plt.xlim([CurrentTime-Number_of_Orbits,CurrentTime])
         AccretionRate = (ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])#/M_dot_0
-        MeanAccretion = [np.mean(AccretionRate[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))]
+        MeanAccretion = np.array([np.mean(AccretionRate[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))])/Mean_Norm_Factor
         plt.plot(TimeBins[1:],MeanAccretion,linewidth = 0.5, label = 'Binned Means', c = 'black')
         plt.legend(loc = 'upper right')
         try:
