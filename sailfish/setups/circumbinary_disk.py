@@ -935,38 +935,37 @@ class CoolInspiral(SetupBase):
     A circumbinary disk setup for GW-inspiralling binaries.
     """
 
-    eos                  = param("gamma-law", "EOS type: either isothermal or gamma-law")
-    domain_radius        = param(10.0, "half side length of the square computational domain")
-    mass_ratio           = param(1.0, "component mass ratio m2 / m1 <= 1", mutable=True)
-    sink_rate            = param(1.0, "component sink rate", mutable=True)
-    sink_radius          = param(0.03, "component sink radius", mutable=True)
-    softening_length     = param(0.03, "gravitational softening length", mutable=True)
-    buffer_is_enabled    = param(True, "whether the buffer zone is enabled", mutable=True)
-    sink_model           = param("acceleration_free", "sink [acceleration_free|force_free|torque_free]", mutable=True)
-    #initial_sigma        = param(0.057, "initial disk surface density at r=a (gamma-law)")
-    #initial_pressure     = param(6.7e-5, "initial disk surface pressure at r=a (gamma-law)")
-    alpha                = param(0.1, "alpha-viscosity parameter (gamma-law)")
-    gamma_law_index_gas  = param(5.0 / 3.0, "adiabatic index (gamma-law)")
-    constant_softening   = param(True, "whether to use constant softening (gamma-law)")
-    retrograde           = param(False, "is disk retrograde?")
-    which_diagnostics    = param("none", "diagnostics set to get from solver [none|mdots]")
+    eos                   = param("gamma-law", "EOS type: either isothermal or gamma-law")
+    domain_radius         = param(10.0, "half side length of the square computational domain")
+    mass_ratio            = param(1.0, "component mass ratio m2 / m1 <= 1", mutable=True)
+    sink_rate             = param(1.0, "component sink rate", mutable=True)
+    sink_radius           = param(0.03, "component sink radius", mutable=True)
+    softening_length      = param(0.03, "gravitational softening length", mutable=True)
+    buffer_is_enabled     = param(True, "whether the buffer zone is enabled", mutable=True)
+    sink_model            = param("acceleration_free", "sink [acceleration_free|force_free|torque_free]", mutable=True)
+    alpha                 = param(0.1, "alpha-viscosity parameter (gamma-law)")
+    nu                    = param(0.001, "kinematic viscosity parameter (isothermal)")
+    gamma_law_index_gas   = param(5.0 / 3.0, "adiabatic index (gamma-law)")
+    constant_softening    = param(True, "whether to use constant softening (gamma-law)")
+    retrograde            = param(False, "is disk retrograde?")
+    which_diagnostics     = param("none", "diagnostics set to get from solver [none|mdots]")
 
     # Cooling specific parameters
-    central_mass_msun    = param(8e6, "Mass of the central object in solar masses")
-    semimajoraxis_pc     = param(None, "Length scale in parsecs") # Correct this for inspirals 
-    mach_number_3a       = param(21, "Disk Mach number just outside cavity") 
-    # Radiation Pressure Contribution (Optional)
-    beta                 = param(1., "Gas pressure fraction P_gas/P_tot where P_tot = P_gas+P_rad") 
+    central_mass_msun     = param(8e6, "Mass of the central object in solar masses")
+    semimajoraxis_pc      = param(None, "Length scale in parsecs") # Correct this for inspirals 
+    mach_number_3a        = param(21, "Disk Mach number just outside cavity") 
+    target_accretion_rate = param(1., "Fraction of Eddington the disk we remap to in post-processing") 
+    beta                  = param(1., "Gas pressure fraction P_gas/P_tot where P_tot = P_gas+P_rad") 
     # Inspiral specific parameters
-    init_separation_rg   = param(100.0, "initial semi-major axis in grav-radii")
-    init_eccentricity    = param(0.0, "orbital eccentricity of the binary")
-    inspiral_start_time  = param(1000., "how many orbits before inspiral starts")
-    integration_timestep = param(0.001, "timestep for integrating the inspiral")
-    semi_major_axis_list = param([]," List of all semi-major axes over the inspiral")
-    eccentricity_list    = param([]," List of all eccentricities axes over the inspiral")
-    inspiral_time_list   = param([]," List of all eccentricities axes over the inspiral")
-    gw_inspiral_time     = param(0.," The circular inspiral time for a0 = 1 ")
-    Eccentric_Anomalies  = param([]," Find the true anomaly given the mean anomaly")
+    init_separation_rg    = param(100.0, "initial semi-major axis in grav-radii")
+    init_eccentricity     = param(0.0, "orbital eccentricity of the binary")
+    inspiral_start_time   = param(1000., "how many orbits before inspiral starts")
+    integration_timestep  = param(0.001, "timestep for integrating the inspiral")
+    semi_major_axis_list  = param([]," List of all semi-major axes over the inspiral")
+    eccentricity_list     = param([]," List of all eccentricities axes over the inspiral")
+    inspiral_time_list    = param([]," List of all eccentricities axes over the inspiral")
+    gw_inspiral_time      = param(0.," The circular inspiral time for a0 = 1 ")
+    Eccentric_Anomalies   = param([]," Find the true anomaly given the mean anomaly")
 
     a0 = 1.0
     GM = 1.0
@@ -1010,8 +1009,7 @@ class CoolInspiral(SetupBase):
 
     @property
     def AccretionRateRescaling(self):
-        EddingtonFrac     = self.SS73._eddington_fraction
-        return 10/EddingtonFrac
+        return self.target_accretion_rate / self.SS73._eddington_fraction
 
     @property
     def cooling_coefficient(self):
@@ -1020,8 +1018,8 @@ class CoolInspiral(SetupBase):
 
 
     def primitive(self, t, coords, primitive):
-        x, y = coords
-        r    = sqrt(x * x + y * y)
+        x, y       = coords
+        r          = sqrt(x * x + y * y)
         r_softened = sqrt(x * x + y * y + self.softening_length * self.softening_length)
         phi_hat_x  = -y / max(r, 1e-12)
         phi_hat_y  = +x / max(r, 1e-12)
@@ -1031,7 +1029,7 @@ class CoolInspiral(SetupBase):
                 sign = -1.
 
         if self.is_isothermal:
-            primitive[0] = self.initial_sigma
+            primitive[0] = 1.0
             primitive[1] = sqrt(self.GM / r_softened) * phi_hat_x * sign
             primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y * sign
 
@@ -1045,13 +1043,14 @@ class CoolInspiral(SetupBase):
                 * r_softened ** (-3.0 / 5.0)
                 * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
             )
-            primitive[1] = sqrt(self.GM / r_softened) * phi_hat_x
-            primitive[2] = sqrt(self.GM / r_softened) * phi_hat_y
             primitive[3] = (
                 pressure
                 * r_softened ** (-3.0 / 2.0)
                 * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
             )
+            primitive[1] = sign * sqrt(self.GM / r_softened) * phi_hat_x
+            primitive[2] = sign * sqrt(self.GM / r_softened) * phi_hat_y
+            
 
     def mesh(self, resolution):
         return PlanarCartesian2DMesh.centered_square(self.domain_radius, resolution)
