@@ -736,6 +736,7 @@ def main_cbdiso_2d():
         try:
             pngname     = args.Outputs + f"{'/DensityMap'}.{int(100*CurrentTime)}.png"
             fig.savefig(pngname, dpi=400)
+            print('Saved at', pngname)
 
         except:
             plt.show()
@@ -799,6 +800,12 @@ def main_cbdgam_2d():
         help="use log scaling",
     )
     parser.add_argument(
+        "--vmap",
+        default=False,
+        action="store_true",
+        help="plot gas velocities",
+    )
+    parser.add_argument(
         "--vmin",
         default=None,
         type=float,
@@ -839,25 +846,7 @@ def main_cbdgam_2d():
         default="magma",
         help="colormap name",
     )
-    #parser.add_argument(
-    #    "--AngularSpeed",
-    #    action="store_true",
-    #    help="plot the orbital speed of a minidisk",
-    #)
-    #parser.add_argument(
-    #   "--pressure",
-    #    action="store_true",
-    #    help="plot the orbital speed of a minidisk",
-    #)
-    #    parser.add_argument(
-    #    "--CorotatingFrame",
-    #    "-cf",
-    #    action="store_true",
-    #    default=False,
-    #    help="plot velocity vectors",
-    #)
 
-    #fig, ax = plt.subplots(figsize=(column_width, column_width))
 
     args = parser.parse_args()
 
@@ -900,6 +889,7 @@ def main_cbdgam_2d():
             Teff          = EffectiveTemperature(optical_depth, Midplane_T)
             EddingtonFrac = SS73._eddington_fraction
             RescaledTemp  = Teff * (10/EddingtonFrac) ** 0.25
+            print(10/SS73._eddington_fraction)
             f             = RescaledTemp
             
 
@@ -955,6 +945,35 @@ def main_cbdgam_2d():
         fig.subplots_adjust(
         left=0.05, right=0.95, bottom=0.05, top=0.95, hspace=0, wspace=0
         )
+
+    if args.vmap:
+            Number_of_Vectors = 20
+            ni, nj            = mesh.shape
+            x                 = np.array([mesh.cell_coordinates(i, 0)[0] for i in range(ni)])[:, None]
+            y                 = np.array([mesh.cell_coordinates(0, j)[1] for j in range(nj)])[None, :]
+            Vx                = chkpt['solution'][:,:,1].T
+            Vy                = chkpt['solution'][:,:,2].T
+
+            try:
+                rescaled_x = [ix for ix in x if np.abs(ix) < args.radius]
+                xmin, xmax = np.where(x == np.min(rescaled_x))[0][0], np.where(x == np.max(rescaled_x))[0][0]
+            except:
+                rescaled_x = x
+                xmin, xmax = 0,len(x)-1
+
+            Sampling   = (xmax-xmin)//Number_of_Vectors
+            X, Y       = np.meshgrid(x[xmin:xmax:Sampling, :], y[:, xmin:xmax:Sampling])
+            Vx_sampled = Vx[xmin:xmax:Sampling, xmin:xmax:Sampling] 
+            Vy_sampled = Vy[xmin:xmax:Sampling, xmin:xmax:Sampling]# - 0.5
+            #print(np.shape(y[:, xmin:xmax:Sampling]))
+            #print(np.shape(x[xmin:xmax:Sampling, :]))
+            plt.quiver(
+                X, Y,
+                Vx_sampled, Vy_sampled,
+                width=0.0025, angles='xy', scale_units='xy', scale=20, color = 'darkgrey', headwidth=4
+            )
+
+
 
     if args.radius is not None:
             ax.set_xlim(-args.radius, args.radius)
@@ -1012,8 +1031,6 @@ def main_cbdgam_2d():
     if args.Outputs is None:
         plt.show()
     else:
-        #pngname     = args.Outputs + f"{'/DensityMap'}.{int(100*CurrentTime)}.png"
-        
         pngname     = args.Outputs + f"/DensityMap-{int(CurrentTime * 100):05d}.png"
         
         fig.savefig(pngname, dpi=400)
