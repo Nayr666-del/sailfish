@@ -429,13 +429,16 @@ class Solver(SolverBase):
         T                = self.xp.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 10**Precomputed_low)
         optical_depth    = Sigma * self.kappa_code
 
+        # Note that the temperature mapping only occurs on the effective temperature, not the actual temperature. Hence
+        # the code unit optical depth is used to compute the surface temperature before the mapping is applied
         Teff                  = EffectiveTemperature(optical_depth, T)
         RescaledTemp          = Teff * self.setup.AccretionRateRescaling ** 0.25
+        RescaledDepth         = optical_depth * self.setup.AccretionRateRescaling 
         Bolometric_Luminosity = 2 * cgs['sigmab'] * RescaledTemp ** 4 * self.Length_Scale_CGS**2
 
-        transparent_mask = (optical_depth >= 1.0 / self.setup.AccretionRateRescaling)#.astype(self.xp.float64)
-        mask_all_vals_if = (RescaledTemp * transparent_mask >= 1.01)#.astype(self.xp.float64)
-        # High temp cutoff??
+        transparent_mask = (RescaledDepth >= 10.0)
+        mask_all_vals_if = (RescaledTemp * transparent_mask >= 1.01 * 10**Precomputed_low) # Rescaled Temperatures should not be below interpolation minimum
+
 
         Progress         = (self.xp.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
         N0               = self.xp.floor(Progress).astype(int)
@@ -463,7 +466,7 @@ class Solver(SolverBase):
             Bolometric_Luminosity *= mask_all_vals_if
 
             #return Interpolated_Optical, Interpolated_Infared, Bolometric_Luminosity, sum(~mask_all_vals_if)
-            return Interpolated_Infared, Interpolated_Optical, Interpolated_UV, Interpolated_Xray, Bolometric_Luminosity, sum(~mask_all_vals_if)
+            return Interpolated_Infared, Interpolated_Optical, Interpolated_UV, Interpolated_Xray, Bolometric_Luminosity, sum(~mask_all_vals_if), self.xp.max(RescaledTemp)
         
         except IndexError as e:
             if self.xp.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
@@ -472,28 +475,31 @@ class Solver(SolverBase):
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
-                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), sum(~mask_all_vals_if)
+                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), sum(~mask_all_vals_if), 0
             else:
                 print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             
 
     def infared_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[0]
+        return 2 * self.Interpolate_Band_Luminosity(patch)[0]
     
     def optical_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[1]
+        return 2 * self.Interpolate_Band_Luminosity(patch)[1]
     
     def uv_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[2]
+        return 2 * self.Interpolate_Band_Luminosity(patch)[2]
     
     def xray_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[3]
+        return 2 * self.Interpolate_Band_Luminosity(patch)[3]
     
     def bolometric_luminosity(self,patch):
         return self.Interpolate_Band_Luminosity(patch)[4]
     
     def Uncounted_Cells(self,patch):
         return self.Interpolate_Band_Luminosity(patch)[5].sum()
+    
+    def MaxTemperature(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[6] 
     
 
     def reductions(self):
@@ -663,6 +669,8 @@ class Solver(SolverBase):
                 pass1.append(float(sum(self.detect_pressure_floor(p) for p in self.patches))) # double check again
             elif d.quantity == 'uncounted_cells_in_lc':
                 pass1.append(float(sum(self.Uncounted_Cells(p) for p in self.patches))) # double check again
+            elif d.quantity == 'max_temperature':
+                pass1.append(float(max(self.MaxTemperature(p) for p in self.patches)))
 
             
 
