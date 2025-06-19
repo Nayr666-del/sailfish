@@ -368,6 +368,9 @@ def main_cbdiso_2d():
             #TotalSpeed = np.sqrt( self.Vx**2 + self.Vy**2 )
             TotalSpeed = self.Vy
 
+
+            print('Keys', chkpt.keys())
+
             primary, secondary = chkpt['point_masses']
             xprim,yprim        = primary.position_x , primary.position_y
             xsec,ysec          = secondary.position_x, secondary.position_y
@@ -874,7 +877,7 @@ def main_cbdgam_2d():
         SS73 = cooling.ShakuraSunyaevDisk(
             central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
             length_scale_pc   = length_scale_pc,
-            mach_number_3a    = chkpt['model_parameters']['mach_number_3a'],
+            mach_number_a     = chkpt['model_parameters']['mach_number_3a'],
             alpha             = chkpt['model_parameters']['alpha'],
             gamma             = gamma
             )
@@ -1103,6 +1106,7 @@ if __name__ == "__main__":
             
             import numpy as np
             print('Time',chkpt['time']/2/np.pi)
+            print(chkpt.keys())
             
             if chkpt["solver"] == "srhd_1d":
                 print("plotting for srhd_1d solver")
