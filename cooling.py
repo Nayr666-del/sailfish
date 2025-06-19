@@ -277,6 +277,11 @@ def XrayEmission(temperature, dx):
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
 	return np.pi * dx**2 * prefactor * integral 
 
+
+def PlanckSpectrum(nu, T, dx):
+	B_nu = ( 2 * cgs['h'] * nu ** 3 / cgs['c']**2 ) * 1 / (np.expm1(cgs['h'] * nu / (cgs['kb'] * T) ))
+	return np.pi * nu * B_nu * dx**2
+
 if __name__ == '__main__':
 	import numpy as np
 	import matplotlib.pyplot as plt
