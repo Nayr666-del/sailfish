@@ -29,7 +29,9 @@ def E_from_M(M, e=1.0):
 class DavidTimeseries:
     def __init__(self, Checkpoint):
         #Checkpoint = load_checkpoint(chkpt)
-        ts = Checkpoint['timeseries']
+        timeseries_data = Checkpoint['timeseries']
+        max_len         = max(len(arr) for arr in timeseries_data)
+        ts              = np.array([np.pad(arr, (0, max_len - len(arr)), 'constant') for arr in timeseries_data])
 
         self.pointmasses     = Checkpoint["point_masses"]
         self.currenttime     = Checkpoint["time"] / 2 / np.pi 
@@ -57,6 +59,7 @@ class DavidTimeseries:
         self.jdisk           = np.array([s[18] for s in ts])
         self.uv              = np.array([s[19] for s in ts])
         self.xray            = np.array([s[20] for s in ts])
+        #self.Max_temp        = np.array([s[21] for s in ts])
         
         
 
@@ -156,6 +159,12 @@ if __name__ == '__main__':
         action='store_true',
         help="whether to plot the number of cells that have reached the floor values",
     )
+    parser.add_argument(
+        "--Max_temperature",
+        "-MT",
+        action='store_true',
+        help="whether to plot the maximum temperature of the disk",
+    )
     args = parser.parse_args()
     
 
@@ -163,15 +172,20 @@ if __name__ == '__main__':
     chkpt               = load_checkpoint(filename)
     ts                  = DavidTimeseries(chkpt)
 
-    Primary,Secondary   = ts.pointmasses
-    Point_MassPrimary   = PointMass(Primary.mass, Primary.position_x, Primary.position_y, Primary.velocity_x, Primary.velocity_y)
-    Point_MassSecondary = PointMass(Secondary.mass,Secondary.position_x,Secondary.position_y,Secondary.velocity_x,Secondary.velocity_y)
-    OrbitalEccentricity = OrbitalState(Point_MassPrimary,Point_MassSecondary).eccentricity
+    try:
+        Primary,Secondary   = ts.pointmasses
+        Point_MassPrimary   = PointMass(Primary.mass, Primary.position_x, Primary.position_y, Primary.velocity_x, Primary.velocity_y)
+        Point_MassSecondary = PointMass(Secondary.mass,Secondary.position_x,Secondary.position_y,Secondary.velocity_x,Secondary.velocity_y)
+        OrbitalEccentricity = OrbitalState(Point_MassPrimary,Point_MassSecondary).eccentricity
+    except:
+        Primary             = ts.pointmasses
+        OrbitalEccentricity = 0.
+
 
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 200.
+    Number_of_Orbits    = 60.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -179,13 +193,24 @@ if __name__ == '__main__':
     CumulativeTimeBin   = np.cumsum(hist)
     alpha               = Model_Parameters["alpha"]
 
+    if args.Max_temperature:
+        plt.figure()
+        plt.plot(ts.time[-len(Final_Orbits):], ts.Max_temp[-len(Final_Orbits):], c = 'black')
+        plt.xlabel('time')
+        plt.title('Maximum Temperature e = %g'%(np.round(OrbitalEccentricity,3)))
+        plt.yscale('log')
+        try:
+            savename = os.getcwd() + "/MaxTemperature.%04d.png"%(CurrentTime)
+            plt.savefig(savename, dpi=400)
+        except:
+            plt.show()
 
     if args.FloorCount:
         plt.figure()
         plt.plot(ts.time[-len(Final_Orbits):], ts.density_floor[-len(Final_Orbits):], c = 'black', label = r'$N_\mathrm{cells}$ at density floor')     
         plt.plot(ts.time[-len(Final_Orbits):], ts.pressure_floor[-len(Final_Orbits):], c = 'black', linestyle ='dashed', label = r'$N_\mathrm{cells}$ at pressure floor')     
         plt.plot(ts.time[-len(Final_Orbits):], ts.uncounted_cells[-len(Final_Orbits):], c = 'red', label = r'$N_\mathrm{cells}$ ignored by lightcurves') 
-        
+        plt.axhline(y = 4000000)
         
         
         plt.xlabel('time')
@@ -206,9 +231,9 @@ if __name__ == '__main__':
         plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray', linewidth = 0.6) 
         plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity', linewidth = 0.6)
         plt.xlabel('time')
-        plt.title('Multiband Lightcurves e = %g'%(np.round(OrbitalEccentricity,3)))
+        plt.title('Multiband Lightcurves')
         plt.yscale('log')
-        plt.ylim([1e38, 1e46])
+        plt.ylim([1e30, 1e46])
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)

@@ -1121,6 +1121,7 @@ class CoolInspiral(SetupBase):
                 dict(quantity="angular_momentum"),
                 dict(quantity="uv"),
                 dict(quantity="xray"),
+                dict(quantity="max_temperature"),
                 
                 #dict(quantity="eccentricity_vector", radial_cut=(1.0, 6.0)),
                 #dict(quantity="torque",which_mass='both',gravity=True, radial_cut=(0.0, 1.0)),
@@ -1166,6 +1167,12 @@ class CoolInspiral(SetupBase):
     @property
     def code_start_inspiral_time(self):
         return self.inspiral_start_time * self.reference_time_scale
+    
+    @property
+    def kick_speed(self):
+        c_code         = np.sqrt(self.init_separation_rg)
+        Ratio_v_over_c = (530e5) / cgs['c']
+        return Ratio_v_over_c * c_code
 
     
     def check_if_inspiral(self, time):
@@ -1276,26 +1283,20 @@ class CoolInspiral(SetupBase):
             vx2 = -vx1 * self.mass_ratio
             vy2 = -vy1 * self.mass_ratio
 
-            c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= self.sink_radius,)
-            c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= self.sink_radius,)
+            c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= self.softening_length,sink_model=SinkModel['TORQUE_FREE'],sink_rate=self.sink_rate,sink_radius= self.sink_radius,)
+            c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= self.softening_length,sink_model=SinkModel['TORQUE_FREE'],sink_rate=self.sink_rate,sink_radius= self.sink_radius,)
             return (c1,c2)
         
         # Case 3: Merger has occurred
         elif flag =='Merged':
-            x1      = 0.
-            x2      = 0.
-            y1      = 0.
-            y2      = 0.
-            vx1     = 0.
-            vy1     = 0.
-            vx2     = 0.
-            vy2     = 0.
+            tmerge = self.inspiral_time_list[-1] + self.code_start_inspiral_time
+            x  = 0.0
+            y  = - self.kick_speed * (time - tmerge)
+            vx = 0.0
+            vy = - self.kick_speed
 
-            # Mass loss and kick neglected!
-
-            c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
-            c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
-            return (c1, c2)
+            c1 = PointMass(0.97, x, y, vx, vy, softening_length=2 * self.softening_length, sink_model=SinkModel['ACCELERATION_FREE'], sink_rate=self.sink_rate, sink_radius=2 * self.sink_radius,)
+            return c1
 
     def checkpoint_diagnostics(self, time):
         return dict(point_masses=self.point_masses(time))

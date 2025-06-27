@@ -800,6 +800,12 @@ def main_cbdgam_2d():
         help="use log scaling",
     )
     parser.add_argument(
+        "--SED",
+        default=False,
+        action="store_true",
+        help="plot spectrum",
+    )
+    parser.add_argument(
         "--vmap",
         default=False,
         action="store_true",
@@ -884,14 +890,15 @@ def main_cbdgam_2d():
             mp_code    = cgs['mp'] / (SS73._mass)
             kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
 
-            Midplane_T    = ((Pressure / Sigma) * (mp_code / kb_code)).T
+            Midplane_T    = ((Pressure / Sigma) * (mp_code / kb_code))
             optical_depth = Sigma * kappa_code
+            mask_values   = optical_depth >= 1.0 * SS73._eddington_fraction / chkpt['model_parameters']['target_accretion_rate']
+
             Teff          = EffectiveTemperature(optical_depth, Midplane_T)
             EddingtonFrac = SS73._eddington_fraction
             RescaledTemp  = Teff * (10/EddingtonFrac) ** 0.25
-            print(10/SS73._eddington_fraction)
-            f             = RescaledTemp
-            
+            print('Remapping factor', 1/SS73._eddington_fraction)
+            f             = (RescaledTemp * mask_values).T
 
         elif args.field == 'tau':
             Sigma    = fields["sigma"](prim) 
@@ -945,6 +952,51 @@ def main_cbdgam_2d():
         fig.subplots_adjust(
         left=0.05, right=0.95, bottom=0.05, top=0.95, hspace=0, wspace=0
         )
+
+    if args.SED:
+        kb_code    = cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
+        mp_code    = cgs['mp'] / (SS73._mass)
+        kappa_code = cgs['kappa'] / (SS73._length**2 / SS73._mass)
+
+        Sigma           = fields["sigma"](prim) 
+        Pressure        = fields["pre"](prim)
+        optical_depth   = Sigma * kappa_code
+        Remapping_Value = chkpt['model_parameters']['target_accretion_rate'] / SS73._eddington_fraction
+        mask_values     = optical_depth >= (10.0 / Remapping_Value)
+        T               = np.maximum((Pressure / Sigma) * (mp_code / kb_code), 1) * mask_values
+
+        Teff                  = EffectiveTemperature(optical_depth, T)
+        RescaledTemp          = Teff * Remapping_Value ** 0.25
+        mask_values           = optical_depth >= (10.0 / Remapping_Value)
+        
+        ev            = 1.6e-12
+        E_low         = 1e-1 * ev
+        E_high        = 5e3 * ev
+        freq_low      = E_low  / cgs['h']
+        freq_high     = E_high / cgs['h']
+        E_Xray_low    = cgs['h'] * cgs['c'] / (1e-6) / 1000/ ev
+
+        Ev_array      = np.logspace(np.log10(E_low/1000/ev), np.log10(E_high/1000/ev), 100)  # Energy range in eV
+        freq_space    = np.logspace(np.log10(freq_low), np.log10(freq_high), len(Ev_array))  # Frequency range in Hz
+        ni, nj        = np.shape(RescaledTemp)
+        dx            = mesh.dx
+
+        Cell_Spectra  = np.array([cooling.PlanckSpectrum(freq, RescaledTemp, length_scale_pc * cgs['pc'] * dx) for freq in freq_space])
+        Spectrum      = np.sum(np.sum(Cell_Spectra, axis=1), axis=1) 
+        integral      = np.trapz(Spectrum, np.log(freq_space)) 
+
+        plt.figure(figsize=(4, 3))
+        plt.plot(Ev_array, Spectrum, label = 'SED')
+        plt.xscale('log')
+        plt.yscale('log') 
+        plt.axvline(x = E_Xray_low, linestyle='dashed', c = 'red', label = 'X-ray low frequency')        
+        plt.axhline(y = integral, linestyle='dashed', c = 'black', label = 'Total Luminosity')
+        plt.legend()
+        plt.xlabel(r'$h\nu~[\mathrm{kev}]$')
+        plt.ylabel(r'$2\pi\nu B_\nu(T)~[\mathrm{erg/s}]$')
+        plt.title('Spectral Energy Distribution at t = %g'%(chkpt["time"]/ 2 / np.pi))
+        plt.ylim([1e35, 2 * integral])
+        plt.savefig(args.Outputs + "/SED_%g.png"%(chkpt["time"]/ 2 / np.pi), dpi=300, bbox_inches='tight')
 
     if args.vmap:
             Number_of_Vectors = 20
