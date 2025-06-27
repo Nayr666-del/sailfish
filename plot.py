@@ -877,7 +877,7 @@ def main_cbdgam_2d():
         SS73 = cooling.ShakuraSunyaevDisk(
             central_mass_msun = chkpt['model_parameters']['central_mass_msun'], 
             length_scale_pc   = length_scale_pc,
-            mach_number_a     = chkpt['model_parameters']['mach_number_3a'],
+            mach_number_a     = chkpt['model_parameters']['mach_number_a'],
             alpha             = chkpt['model_parameters']['alpha'],
             gamma             = gamma
             )
@@ -892,13 +892,37 @@ def main_cbdgam_2d():
 
             Midplane_T    = ((Pressure / Sigma) * (mp_code / kb_code))
             optical_depth = Sigma * kappa_code
-            mask_values   = optical_depth >= 1.0 * SS73._eddington_fraction / chkpt['model_parameters']['target_accretion_rate']
+            mask_values   = optical_depth >= 1.0 * SS73._eddington_fraction / chkpt['model_parameters']['target_accretion_rate'] ####FIX THIS MASK
 
             Teff          = EffectiveTemperature(optical_depth, Midplane_T)
             EddingtonFrac = SS73._eddington_fraction
             RescaledTemp  = Teff * (10/EddingtonFrac) ** 0.25
             print('Remapping factor', 1/SS73._eddington_fraction)
             f             = (RescaledTemp * mask_values).T
+
+        elif args.field == 'mach':
+             Sigma    = fields["sigma"](prim)
+             Pressure = fields["pre"](prim)
+ 
+             cs     = (gamma * Pressure / Sigma)**0.5
+             ni, nj = mesh.shape
+             xspace = np.linspace(mesh.x0, mesh.x1,ni)
+             yspace = np.linspace(mesh.y0, mesh.y1,nj)
+             X, Y   = np.meshgrid(xspace, yspace)
+             primary, secondary = chkpt['point_masses']
+             xprim, yprim = primary.position_x, primary.position_y
+             xsec, ysec   = secondary.position_x, secondary.position_y
+
+             R_1     = np.sqrt((X-xprim)**2 + (Y-yprim)**2)
+             R_2     = np.sqrt((X-xsec)**2  + (Y-ysec)**2)
+             Omega_1 = np.sqrt(0.5 / (R_1**3 + 1e-12)) #Assuming a Keplerian disk
+             Omega_2 = np.sqrt(0.5 / (R_2**3 + 1e-12))  #Assuming a Keplerian disk
+             
+             ROmega  = np.sqrt((R_1 * Omega_1)**2 + (R_2 * Omega_2)**2) #Assuming a Keplerian disk
+ 
+             Mach    = ROmega / cs
+             f       = Mach.T
+
 
         elif args.field == 'tau':
             Sigma    = fields["sigma"](prim) 
@@ -999,7 +1023,7 @@ def main_cbdgam_2d():
         plt.savefig(args.Outputs + "/SED_%g.png"%(chkpt["time"]/ 2 / np.pi), dpi=300, bbox_inches='tight')
 
     if args.vmap:
-            Number_of_Vectors = 20
+            Number_of_Vectors = 15
             ni, nj            = mesh.shape
             x                 = np.array([mesh.cell_coordinates(i, 0)[0] for i in range(ni)])[:, None]
             y                 = np.array([mesh.cell_coordinates(0, j)[1] for j in range(nj)])[None, :]
