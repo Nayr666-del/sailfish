@@ -953,8 +953,8 @@ class CoolInspiral(SetupBase):
     # Cooling specific parameters
     central_mass_msun     = param(8e6, "Mass of the central object in solar masses")
     semimajoraxis_pc      = param(None, "Length scale in parsecs") # Correct this for inspirals 
-    mach_number_3a        = param(21, "Disk Mach number just outside cavity") 
-    target_accretion_rate = param(1., "Fraction of Eddington the disk we remap to in post-processing") 
+    mach_number_a         = param(10, "Disk Mach number") 
+    target_accretion_rate = param(1., "Fraction of Eddington the disk we remap to in post-processing", mutable=True) 
     beta                  = param(1., "Gas pressure fraction P_gas/P_tot where P_tot = P_gas+P_rad") 
     # Inspiral specific parameters
     init_separation_rg    = param(100.0, "initial semi-major axis in grav-radii")
@@ -966,6 +966,7 @@ class CoolInspiral(SetupBase):
     inspiral_time_list    = param([]," List of all eccentricities axes over the inspiral")
     gw_inspiral_time      = param(0.," The circular inspiral time for a0 = 1 ")
     Eccentric_Anomalies   = param([]," Find the true anomaly given the mean anomaly")
+    OpticalDepthFloor     = param(0., "Minimum optical depth to measure lightcurves", mutable=True) 
 
     a0 = 1.0
     GM = 1.0
@@ -1001,7 +1002,7 @@ class CoolInspiral(SetupBase):
         SS73_Setup = cooling.ShakuraSunyaevDisk(
             central_mass_msun = self.central_mass_msun, 
             length_scale_pc   = self.length_scale_pc,
-            mach_number_3a    = self.mach_number_3a,
+            mach_number_a     = self.mach_number_a,
             alpha             = self.alpha,
             gamma             = self.gamma_law_index
             )
@@ -1037,20 +1038,10 @@ class CoolInspiral(SetupBase):
             sigma    = self.SS73.surface_density_profile(r_softened)
             pressure = self.SS73.surface_pressure_profile(r_softened)
 
-            # See eq. (A2) from Goodman (2003)
-            primitive[0] = (
-                sigma
-                * r_softened ** (-3.0 / 5.0)
-                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
-            )
-            primitive[3] = (
-                pressure
-                * r_softened ** (-3.0 / 2.0)
-                * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
-            )
+            primitive[0] = sigma * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
             primitive[1] = sign * sqrt(self.GM / r_softened) * phi_hat_x
             primitive[2] = sign * sqrt(self.GM / r_softened) * phi_hat_y
-            
+            primitive[3] = pressure * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
 
     def mesh(self, resolution):
         return PlanarCartesian2DMesh.centered_square(self.domain_radius, resolution)
