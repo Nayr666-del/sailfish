@@ -7,6 +7,7 @@ import os
 import argparse
 from sailfish.setup_base import SetupBase
 from sailfish.physics.kepler import OrbitalState, PointMass
+import scipy
 
 
 class FixNumpyCoreUnpickler(pk.Unpickler):

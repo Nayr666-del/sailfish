@@ -3,13 +3,7 @@ import pickle as pk
 import sys
 from sailfish.physics.kepler import OrbitalState
 import matplotlib.pyplot as plt
-
-sys.path.insert(1,"/groups/astro/davidon/sailfish/")
 import sailfish
-
-
-sys.path.insert(1, ".")
-
 class FixNumpyCoreUnpickler(pk.Unpickler):
     def find_class(self, module, name):
         if module.startswith("numpy._core"):
@@ -350,11 +344,11 @@ def main_cbdiso_2d():
 
 
             fig, ax = plt.subplots(figsize=[12, 9])
-            #ni, nj = mesh.shape
-            #xspace = np.linspace(mesh.x0,mesh.x1,ni)
-            #yspace = np.linspace(mesh.y0,mesh.y1,nj)
-            ax.plot(xspace,f[nj//2,:], label = 'horizontal cut')
-            ax.plot(yspace,f[:,ni//2], label = 'vertical cut')
+            ni, nj = mesh.shape
+            xspace = np.linspace(mesh.x0,mesh.x1,ni)
+            yspace = np.linspace(mesh.y0,mesh.y1,nj)
+            ax.plot(xspace,self.f[nj//2,:], label = 'horizontal cut')
+            ax.plot(yspace,self.f[:,ni//2], label = 'vertical cut')
             plt.legend()
             plt.title('Velocity Profile for a Retrograde Disk')
             plt.ylabel(r'$\|v_\mathrm{gas}\|~\left[a\Omega\right]$')
@@ -774,6 +768,7 @@ def main_cbdgam_2d():
         "vx": lambda p: p[:, :, 1],
         "vy": lambda p: p[:, :, 2],
         "pre": lambda p: p[:, :, 3],
+        "torque": None
     }
 
 
@@ -855,8 +850,49 @@ def main_cbdgam_2d():
     #)
 
     #fig, ax = plt.subplots(figsize=(column_width, column_width))
-
     args = parser.parse_args()
+    class TorqueCalculation:
+        def __init__(self, mesh, masses):
+            self.mesh = mesh
+            self.masses = masses
+
+        def __call__(self, primitive):
+            mesh   = self.mesh
+            ni, nj = mesh.shape
+            dx     = mesh.dx
+            dy     = mesh.dy
+            da     = dx * dy
+            x      = np.array([mesh.cell_coordinates(i, 0)[0] for i in range(ni)])[:, None]
+            y      = np.array([mesh.cell_coordinates(0, j)[1] for j in range(nj)])[None, :]
+
+            x1  = self.masses[0].position_x
+            y1  = self.masses[0].position_y
+            x2  = self.masses[1].position_x
+            y2  = self.masses[1].position_y
+            m1  = self.masses[0].mass
+            m2  = self.masses[1].mass
+            rs1 = self.masses[0].softening_length
+            rs2 = self.masses[1].softening_length
+
+            sigma = primitive[:, :, 0]
+            delx1 = x - x1
+            dely1 = y - y1
+            delx2 = x - x2
+            dely2 = y - y2
+
+            # forces on the gas
+            fx1 = -sigma * da * m1 * delx1 / (delx1**2 + dely1**2 + rs1**2) ** 1.5
+            fy1 = -sigma * da * m1 * dely1 / (delx1**2 + dely1**2 + rs1**2) ** 1.5
+            fx2 = -sigma * da * m2 * delx2 / (delx2**2 + dely2**2 + rs2**2) ** 1.5
+            fy2 = -sigma * da * m2 * dely2 / (delx2**2 + dely2**2 + rs2**2) ** 1.5
+
+            t1 = x * fy1 - y * fx1
+            t2 = x * fy2 - y * fx2
+            t = t1 + t2
+            print("total torque:", t.sum())
+            return np.abs(t) ** 0.125 * np.sign(t)
+
+
 
     for filename in args.checkpoints:
         fig, ax     = plt.subplots(figsize=[10, 10])
@@ -864,7 +900,7 @@ def main_cbdgam_2d():
         CurrentTime = chkpt["time"]/ 2 / np.pi
         mesh        = chkpt["mesh"]
         prim        = chkpt["solution"]
-
+        fields["torque"] = TorqueCalculation(mesh, chkpt["point_masses"])
         
         import cooling
         from cooling import gamma_law_index, EffectiveTemperature, cgs
@@ -1001,7 +1037,7 @@ def configure_matplotlib():
     plt.rc('axes'  , labelsize=8)
     plt.rc('legend', fontsize=8)
     plt.rc('font', family='DejaVu Sans', size=8)
-    plt.rc('text', usetex=True)
+    plt.rc('text', usetex=False)
 configure_matplotlib()
 
 if __name__ == "__main__":

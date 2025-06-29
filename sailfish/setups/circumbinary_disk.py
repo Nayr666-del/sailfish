@@ -957,6 +957,7 @@ class CoolInspiral(SetupBase):
     mach_number_3a       = param(21, "Disk Mach number just outside cavity") 
     # Radiation Pressure Contribution (Optional)
     beta                 = param(1., "Gas pressure fraction P_gas/P_tot where P_tot = P_gas+P_rad") 
+    target_accretion_rate= param(10, "Target accretion rate. ")
     # Inspiral specific parameters
     init_separation_rg   = param(100.0, "initial semi-major axis in grav-radii")
     init_eccentricity    = param(0.0, "orbital eccentricity of the binary")
@@ -997,8 +998,7 @@ class CoolInspiral(SetupBase):
 
     @property
     def AccretionRateRescaling(self):
-        EddingtonFrac     = self.SS73._eddington_fraction
-        return 10/EddingtonFrac
+        return self.target_accretion_rate/self.SS73._eddington_fraction
 
     @property
     def cooling_coefficient(self):
@@ -1096,6 +1096,34 @@ class CoolInspiral(SetupBase):
                 #dict(quantity="power",which_mass=1,gravity=True, radial_cut=(1.0, 10.0)),
                 #dict(quantity="power",which_mass=2,gravity=True, radial_cut=(0.0, 1.0)),
                 #dict(quantity="power",which_mass=2,gravity=True, radial_cut=(1.0, 10.0)),
+            ]
+        if self.which_diagnostics == "Ryan":
+            return [
+                dict(quantity="time"),
+                dict(quantity="semimajor-axis"),
+                dict(quantity="eccentricity"),
+                dict(quantity="density_floor"),
+                dict(quantity="pressure_floor"),
+                dict(quantity="Accreted_energy"),
+                dict(quantity="optical"),
+                dict(quantity="infared"),
+                dict(quantity="bolometric"),
+                dict(quantity="uncounted_cells_in_lc"),
+                dict(quantity="mdot", which_mass=1, accretion=True),
+                dict(quantity="mdot", which_mass=2, accretion=True),
+                dict(quantity="torque", which_mass='both', gravity=True),
+                dict(quantity="torque", which_mass='both', accretion=True),
+                dict(quantity="power" ,which_mass=1,gravity=True),
+                dict(quantity="power" ,which_mass=2,gravity=True),
+                dict(quantity="power" ,which_mass=1,accretion=True),
+                dict(quantity="power" ,which_mass=2,accretion=True),
+                dict(quantity="angular_momentum"),
+                #Other diagnostics:
+                #Angular power? (cylindrical harmonics)
+                #Dipole moment / quadrupole moment etc.
+                #Escape velocity -- saved at checkpoints
+                #Accretion rate from certain regions (i.e. regions where shocks become significant)
+                    
             ]
         else:
             return []
@@ -1242,6 +1270,8 @@ class CoolInspiral(SetupBase):
             return (c1,c2)
         
         # Case 3: Merger has occurred
+        #fix for the case of kicks
+  
         elif flag =='Merged':
             x1      = 0.
             x2      = 0.
@@ -1256,6 +1286,19 @@ class CoolInspiral(SetupBase):
 
             c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
             c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
+            return (c1, c2)
+        elif flag == "newmerged":
+            x1     = 0.
+            x2     = 0.
+            y1     = 0.
+            y2     = 0.
+            vx1     = 530 * velocity_units
+            vy1     = 0.
+            vx2     = 0.
+            vy2     = 0.
+            
+            c1 = PointMass(m1, x1 + time * vx1, y1 + time * vy1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
+            c2 = PointMass(m2, x2 + time * vx2, y2 + time * vy2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
             return (c1, c2)
 
     def checkpoint_diagnostics(self, time):
