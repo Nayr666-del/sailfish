@@ -28,6 +28,7 @@ class Options(NamedTuple):
     density_floor: float = 1e-10
     velocity_ceiling: float = 1e16
     mach_ceiling: float = 1e5
+    sink_emission: bool = True
 
 
 def initial_condition(setup, mesh, time):
@@ -353,10 +354,6 @@ class Solver(SolverBase):
     def Length_Scale_CGS(self):
          return self.setup.length_scale_pc * cgs['pc']
 
-    #@property
-    #def Cell_Length_CGS(self):
-    #    return (self.setup.length_scale_pc * cgs['pc']) * self.mesh.dx
-
     @property
     def kb_code(self):
         return cgs['kb'] / (self.setup.SS73._mass * self.setup.SS73._length**2 / self.setup.SS73._time**2)
@@ -436,9 +433,22 @@ class Solver(SolverBase):
         RescaledDepth         = optical_depth * self.setup.AccretionRateRescaling 
         Bolometric_Luminosity = 2 * cgs['sigmab'] * RescaledTemp ** 4 * self.Length_Scale_CGS**2
 
-        transparent_mask = (RescaledDepth >= 10.0)
-        mask_all_vals_if = (RescaledTemp * transparent_mask >= 1.01 * 10**Precomputed_low) # Rescaled Temperatures should not be below interpolation minimum
 
+
+        if not patch.options.sink_emission:
+            x_, y_  = patch.cell_center_coordinate_arrays
+            x, y    = np.insert(x_, [0,1,-2,-1], [x_[0],x_[0], x_[-2], x_[-1]], axis=0), np.insert(y_.T, [0,1,-2,-1], [y_.T[0],y_.T[0], y_.T[-2], y_.T[-1]], axis=0).T
+            m1, m2  = patch.physics.point_masses(patch.time)
+            r1_mask = ((-m1.position_x)**2 + (y-m1.position_y)**2) > m1.softening_length**2
+            r2_mask = ((x-m2.position_x)**2 + (y-m2.position_y)**2) > m2.softening_length**2
+        else:
+            r1_mask = 1
+            r2_mask = 1
+
+
+        transparent_mask = (RescaledDepth >= 10.0)
+        mask_interp_min  = (RescaledTemp * transparent_mask >= 1.01 * 10**Precomputed_low) # Rescaled Temperatures should not be below interpolation minimum
+        mask             = r1_mask * r2_mask * mask_interp_min 
 
         Progress         = (self.xp.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
         N0               = self.xp.floor(Progress).astype(int)
@@ -459,14 +469,14 @@ class Solver(SolverBase):
             Interpolated_UV      = UV_N0      + Bracket_N0_N1 * (UV_N1-UV_N0)
             Interpolated_Xray    = Xray_N0    + Bracket_N0_N1 * (Xray_N1-Xray_N0)
 
-            Interpolated_Optical  *= mask_all_vals_if
-            Interpolated_Infared  *= mask_all_vals_if
-            Interpolated_UV       *= mask_all_vals_if
-            Interpolated_Xray     *= mask_all_vals_if
-            Bolometric_Luminosity *= mask_all_vals_if
+            Interpolated_Optical  *= mask
+            Interpolated_Infared  *= mask
+            Interpolated_UV       *= mask
+            Interpolated_Xray     *= mask
+            Bolometric_Luminosity *= mask
 
             #return Interpolated_Optical, Interpolated_Infared, Bolometric_Luminosity, sum(~mask_all_vals_if)
-            return Interpolated_Infared, Interpolated_Optical, Interpolated_UV, Interpolated_Xray, Bolometric_Luminosity, sum(~mask_all_vals_if), self.xp.max(RescaledTemp)
+            return Interpolated_Infared, Interpolated_Optical, Interpolated_UV, Interpolated_Xray, Bolometric_Luminosity, sum(~mask_interp_min), self.xp.max(RescaledTemp)
         
         except IndexError as e:
             if self.xp.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
