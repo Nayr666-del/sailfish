@@ -1039,9 +1039,10 @@ class CoolInspiral(SetupBase):
             pressure = self.SS73.surface_pressure_profile(r_softened)
 
             primitive[0] = sigma * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
-            primitive[1] = sign * sqrt(self.GM / r_softened) * phi_hat_x
-            primitive[2] = sign * sqrt(self.GM / r_softened) * phi_hat_y
+            primitive[1] = sign  * sqrt(self.GM / r_softened) * phi_hat_x
+            primitive[2] = sign  * sqrt(self.GM / r_softened) * phi_hat_y
             primitive[3] = pressure * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+            
 
     def mesh(self, resolution):
         return PlanarCartesian2DMesh.centered_square(self.domain_radius, resolution)
