@@ -185,7 +185,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 60.
+    Number_of_Orbits    = 10.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -233,7 +233,7 @@ if __name__ == '__main__':
         plt.xlabel('time')
         plt.title('Multiband Lightcurves')
         plt.yscale('log')
-        plt.ylim([1e30, 1e46])
+        plt.ylim([1e40, 6e48])
         plt.legend()
         try:
             savename = os.getcwd() + "/Lightcurves.%04d.png"%(CurrentTime)

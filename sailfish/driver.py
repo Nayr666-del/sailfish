@@ -535,7 +535,15 @@ def simulate(driver):
                 if dt is None or (iteration % new_timestep_cadence == 0):
                     dx = mesh.min_spacing(siml_time)
                     dt = dx / solver.maximum_wavespeed() * cfl_number
-                solver.advance(dt)
+                if dt > 1e-10:
+                    solver.advance(dt)
+                else:
+                    logger.warning(
+                        f"timestep dt={dt:.3e} is too small, ending simulation"
+                    )
+                    import sys
+                    sys.exit(0)
+
                 iteration += 1
 
         Mzps = mesh.num_total_zones / fold_time() * 1e-6 * fold
