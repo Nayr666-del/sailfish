@@ -365,8 +365,20 @@ class Solver(SolverBase):
     @property
     def kappa_code(self):
         return cgs['kappa'] / (self.setup.SS73._length**2 / self.setup.SS73._mass)
-
     
+    @property
+    def point_mass_distance(self):
+        x_, y_           = patch.cell_center_coordinate_arrays
+        x, y             = x_[-1,0]*self.xp.ones(np.shape(x_)[0]+4) ,  y_[0,-1]*self.xp.ones(np.shape(y_)[1]+4)
+        x[2:-2]          = x_[:,0]
+        y[2:-2]          = y_[0,:]
+        X, Y             = np.meshgrid(x, y, indexing='ij')
+
+        m1, m2  = patch.physics.point_masses(patch.time)
+        r1      = ((X-m1.position_x)**2 + (Y-m1.position_y)**2) 
+        r2      = ((X-m2.position_x)**2 + (Y-m2.position_y)**2) 
+        return r1, r2
+
     @property
     def Precompute_Band_Luminosities(self):
         logT_low  = 0
@@ -412,7 +424,6 @@ class Solver(SolverBase):
         mask     = pressure <= patch.options.pressure_floor * 1.01
         return mask.sum() ## Return and check this sum over patches. Is it multiplied by da? If not is it a bottleneck?
 
-
     def Interpolate_Band_Luminosity(self, patch):
         Precomputed      = list(self.Precompute_Band_Luminosities)
         Precomputed[2]   = self.xp.asarray(Precomputed[2])
@@ -436,11 +447,15 @@ class Solver(SolverBase):
 
 
         if not patch.options.sink_emission:
-            x_, y_  = patch.cell_center_coordinate_arrays
-            x, y    = np.insert(x_, [0,1,-2,-1], [x_[0],x_[0], x_[-2], x_[-1]], axis=0), np.insert(y_.T, [0,1,-2,-1], [y_.T[0],y_.T[0], y_.T[-2], y_.T[-1]], axis=0).T
+            x_, y_           = patch.cell_center_coordinate_arrays
+            x, y             = x_[-1,0]*self.xp.ones(np.shape(x_)[0]+4) ,  y_[0,-1]*self.xp.ones(np.shape(y_)[1]+4)
+            x[2:-2]          = x_[:,0]
+            y[2:-2]          = y_[0,:]
+            X, Y             = np.meshgrid(x, y, indexing='ij')
             m1, m2  = patch.physics.point_masses(patch.time)
-            r1_mask = ((-m1.position_x)**2 + (y-m1.position_y)**2) > m1.softening_length**2
-            r2_mask = ((x-m2.position_x)**2 + (y-m2.position_y)**2) > m2.softening_length**2
+            r1_mask = ((X-m1.position_x)**2 + (Y-m1.position_y)**2) > m1.sink_radius**2
+            r2_mask = ((X-m2.position_x)**2 + (Y-m2.position_y)**2) > m2.sink_radius**2
+
         else:
             r1_mask = 1
             r2_mask = 1
@@ -485,7 +500,7 @@ class Solver(SolverBase):
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
-                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), sum(~mask_all_vals_if), 0
+                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), sum(~mask_interp_min), 0
             else:
                 print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             
