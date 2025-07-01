@@ -238,7 +238,7 @@ def InfaredEmission(temperature, dx):
 
 	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
 
-	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integrand = x_grid**3 / np.expm1(x_grid)
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
@@ -252,7 +252,7 @@ def OpticalEmission(temperature, dx):
 
 	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
 
-	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integrand = x_grid**3 / np.expm1(x_grid)
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
@@ -265,7 +265,7 @@ def UVEmission(temperature, dx):
 
 	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
 
-	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integrand = x_grid**3 / np.expm1(x_grid)
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
@@ -278,7 +278,7 @@ def XrayEmission(temperature, dx):
 
 	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
 
-	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integrand = x_grid**3 / np.expm1(x_grid)
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
