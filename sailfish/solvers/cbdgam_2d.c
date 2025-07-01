@@ -13,6 +13,7 @@ TODO:
 // ============================================================================
 #define NCONS 4
 #define PLM_THETA 1.5
+#define HRMAX 0.8
 
 
 // ============================ MATH ==========================================
@@ -77,7 +78,8 @@ PRIVATE double disk_height(
     struct PointMassList *mass_list,
     double x1,
     double y1,
-    double *prim)
+    double *prim,
+    double gamma_law_index)
 {
     if (mass_list->masses[0].mass == 0.0 && mass_list->masses[1].mass == 0.0)
     {
@@ -103,7 +105,7 @@ PRIVATE double disk_height(
     double sigma = prim[0];
     double pres  = prim[3];
 
-    return sqrt(pres / sigma) / sqrt(omegatilde2);
+    return sqrt(gamma_law_index * pres / sigma) / sqrt(omegatilde2);
 }
 
 PRIVATE void point_mass_source_term(
@@ -323,6 +325,9 @@ PRIVATE void cooling_term(
 PRIVATE void conserved_to_primitive(
     const double *cons,
     double *prim,
+    struct PointMassList *mass_list,
+    double xc,
+    double yc, 
     double velocity_ceiling,
     double density_floor,
     double pressure_floor,
@@ -346,6 +351,14 @@ PRIVATE void conserved_to_primitive(
     prim[1] = vx;
     prim[2] = vy;
     prim[3] = pres;
+
+    double r = sqrt(xc * xc + yc * yc + 1e-12);
+    double h = disk_height(mass_list, xc, yc, prim, gamma_law_index);
+
+    if (h / r > HRMAX) {
+    	double omega_tilde = sqrt(gamma_law_index * pres / rho) / h;
+    	prim[3] = rho / gamma_law_index * pow(r * omega_tilde * HRMAX, 2.0);
+    }
 }
 
 PRIVATE void primitive_to_conserved(const double *prim, double *cons, double gamma_law_index)
@@ -620,7 +633,7 @@ PUBLIC void cbdgam_2d_advance_rk(
         double cs2ri = sound_speed_squared(gamma_law_index, pri);
         double cs2lj = sound_speed_squared(gamma_law_index, plj);
         double cs2rj = sound_speed_squared(gamma_law_index, prj);
-        double hcc = disk_height(&mass_list, xc, yc, pcc);
+        double hcc = disk_height(&mass_list, xc, yc, pcc, gamma_law_index);
 
         riemann_hlle(plim, plip, fli, cs2li, 0, gamma_law_index);
         riemann_hlle(prim, prip, fri, cs2ri, 0, gamma_law_index);
@@ -642,10 +655,10 @@ PUBLIC void cbdgam_2d_advance_rk(
             shear_strain(gxcc, gycc, dx, dy, scc);
 
             double cs2cc = sound_speed_squared(gamma_law_index, pcc);
-            double hli = disk_height(&mass_list, xl, yc, pli);
-            double hri = disk_height(&mass_list, xr, yc, pri);
-            double hlj = disk_height(&mass_list, xc, yl, plj);
-            double hrj = disk_height(&mass_list, xc, yr, prj);
+            double hli = disk_height(&mass_list, xl, yc, pli, gamma_law_index);
+            double hri = disk_height(&mass_list, xr, yc, pri, gamma_law_index);
+            double hlj = disk_height(&mass_list, xc, yl, plj, gamma_law_index);
+            double hrj = disk_height(&mass_list, xc, yr, prj, gamma_law_index);
 
             double nucc = alpha * hcc * sqrt(cs2cc);
             double nuli = alpha * hli * sqrt(cs2li);
@@ -684,7 +697,7 @@ PUBLIC void cbdgam_2d_advance_rk(
         }
 
         double *pout = &primitive_wr[ncc];
-        conserved_to_primitive(ucc, pout, velocity_ceiling, density_floor, pressure_floor, gamma_law_index);
+        conserved_to_primitive(ucc, pout, &mass_list, xc, yc, velocity_ceiling, density_floor, pressure_floor, gamma_law_index);
     }
 }
 
@@ -784,7 +797,7 @@ PUBLIC void cbdgam_2d_point_mass_source_term(
         double yc = patch_yl + (j + 0.5) * dy;
         double *pc = &primitive[ncc];
         double *uc = &cons_rate[ncc];
-        double h = disk_height(&mass_list, xc, yc, pc);
+        double h = disk_height(&mass_list, xc, yc, pc, gamma_law_index);
         point_mass_source_term(&mass_list.masses[which_mass - 1], xc, yc, 1.0, pc, h, uc, constant_softening, gamma_law_index);
     }
 }
