@@ -16,6 +16,7 @@ import cooling
 from sailfish.physics.Peters_Inspiral import Orbital_Inspiral
 from sailfish.setup_base import SetupBase, SetupError, param
 import os
+import numpy as np
 
 class CircumbinaryDisk(SetupBase):
     r"""
@@ -961,7 +962,7 @@ class CoolInspiral(SetupBase):
     # Inspiral specific parameters
     init_separation_rg   = param(100.0, "initial semi-major axis in grav-radii")
     init_eccentricity    = param(0.0, "orbital eccentricity of the binary")
-    inspiral_start_time  = param(1000., "how many orbits before inspiral starts")
+    inspiral_start_time  = param(0., "how many orbits before inspiral starts")
     integration_timestep = param(0.001, "timestep for integrating the inspiral")
     semi_major_axis_list = param([]," List of all semi-major axes over the inspiral")
     eccentricity_list    = param([]," List of all eccentricities axes over the inspiral")
@@ -1282,25 +1283,24 @@ class CoolInspiral(SetupBase):
             vx2     = 0.
             vy2     = 0.
 
-            # Mass loss and kick neglected!
-
-            c1 = PointMass(m1, x1, y1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
-            c2 = PointMass(m2, x2, y2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
+            epsilon = 0.05
+            c1 = PointMass(m1 * (1-epsilon / 2), x1, y1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
+            c2 = PointMass(m2 * (1-epsilon / 2), x2, y2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
             return (c1, c2)
         elif flag == "newmerged":
             x1     = 0.
             x2     = 0.
             y1     = 0.
             y2     = 0.
-            vx1     = 530 * velocity_units
+           # vx1     = 530 * velocity_units
             vy1     = 0.
             vx2     = 0.
             vy2     = 0.
-            
+            #Contantly update mass
             c1 = PointMass(m1, x1 + time * vx1, y1 + time * vy1, vx1, vy1, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
             c2 = PointMass(m2, x2 + time * vx2, y2 + time * vy2, vx2, vy2, softening_length= 2 * self.softening_length,sink_model=SinkModel[self.sink_model.upper()],sink_rate=self.sink_rate,sink_radius= 2 * self.sink_radius,)
             return (c1, c2)
-
+            #Should check if mass is near boundaries
     def checkpoint_diagnostics(self, time):
         return dict(point_masses=self.point_masses(time))
 

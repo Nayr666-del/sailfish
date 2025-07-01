@@ -86,7 +86,7 @@ class DavidTimeseries:
 
     @property
     def buffer_delta_j(self):
-    	return self.torque_b * self.dt
+    	return self.torque_a * self.dt
 
     @property
     def total_angular_momentum(self):
