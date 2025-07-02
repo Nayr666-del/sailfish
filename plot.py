@@ -768,7 +768,8 @@ def main_cbdgam_2d():
         "vx": lambda p: p[:, :, 1],
         "vy": lambda p: p[:, :, 2],
         "pre": lambda p: p[:, :, 3],
-        "torque": None
+        "torque": None,
+        "div-v": None
     }
 
 
@@ -891,7 +892,28 @@ def main_cbdgam_2d():
             t = t1 + t2
             print("total torque:", t.sum())
             return np.abs(t) ** 0.125 * np.sign(t)
-
+    #Numerical Implementation
+    #Needs checking - analytic from solvers?
+    class VelocityDivergence:
+        def __init__(self, mesh):
+            self.mesh = mesh
+            
+        def __call__(self, primitive):
+            mesh = self.mesh
+            ni, nj = mesh.shape
+            dx     = mesh.dx
+            dy     = mesh.dy
+            
+            vx = primitive[:,:,1]
+            vy = primitive[:,:,2]
+            
+            dvxdx = np.gradient(vx,dx,axis=1)
+            dvydy = np.gradient(vy,dy,axis=0)
+            divv = dvxdx + dvydy
+            
+            return np.sign(divv) * np.abs(divv) ** 0.125
+            
+        
 
 
     for filename in args.checkpoints:
@@ -901,6 +923,7 @@ def main_cbdgam_2d():
         mesh        = chkpt["mesh"]
         prim        = chkpt["solution"]
         fields["torque"] = TorqueCalculation(mesh, chkpt["point_masses"])
+        fields["div-v"] = VelocityDivergence(mesh)
         
         import cooling
         from cooling import gamma_law_index, EffectiveTemperature, cgs
@@ -938,7 +961,6 @@ def main_cbdgam_2d():
             #print('Emitting Temp',EmittingTemp)
             #print('Optical depth', kappa_code * 1e-10)
             
-
         else:
             f = fields[args.field](prim).T
 
