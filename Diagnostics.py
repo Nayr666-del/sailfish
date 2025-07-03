@@ -21,10 +21,10 @@ def load_checkpoint(filename, require_solver=None):
         chkpt = FixNumpyCoreUnpickler(f).load()
     return chkpt
 
-def E_from_M(M, e=1.0):
-    f = lambda E: E - e * np.sin(E) - M
-    E = scipy.optimize.root_scalar(f, x0=M, x1=M + 0.1, method='secant').root
-    return E
+#def E_from_M(M, e=1.0):
+#    f = lambda E: E - e * np.sin(E) - M
+#    E = scipy.optimize.root_scalar(f, x0=M, x1=M + 0.1, method='secant').root
+#    return E
 
 class DavidTimeseries:
     def __init__(self, Checkpoint):
@@ -71,9 +71,9 @@ class DavidTimeseries:
     def mean_anomaly(self):
         return self.time * 2 * np.pi
 
-    @property
-    def eccentric_anomaly(self):
-        return np.array([E_from_M(x, e=e) for x, e in zip(self.mean_anomaly, self.eccentricity)])
+    #@property
+    #def eccentric_anomaly(self):
+    #    return np.array([E_from_M(x, e=e) for x, e in zip(self.mean_anomaly, self.eccentricity)])
 
     @property
     def binary_torque(self):
@@ -81,11 +81,11 @@ class DavidTimeseries:
 
     @property
     def binary_delta_j(self):
-    	return (self.torque_g + self.torque_a) * self.dt
+        return (self.torque_g + self.torque_a) * self.dt
 
     @property
     def buffer_delta_j(self):
-    	return self.torque_b * self.dt
+        return self.torque_b * self.dt
 
     @property
     def total_angular_momentum(self):
@@ -185,7 +185,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 10.
+    Number_of_Orbits    = 100.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits]
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -211,7 +211,7 @@ if __name__ == '__main__':
         plt.plot(ts.time[-len(Final_Orbits):], ts.pressure_floor[-len(Final_Orbits):], c = 'black', linestyle ='dashed', label = r'$N_\mathrm{cells}$ at pressure floor')     
         plt.plot(ts.time[-len(Final_Orbits):], ts.uncounted_cells[-len(Final_Orbits):], c = 'red', label = r'$N_\mathrm{cells}$ ignored by lightcurves') 
         plt.axhline(y = 4000000)
-        
+        #plt.ylim([0,10])
         
         plt.xlabel('time')
         plt.legend()
