@@ -2,6 +2,7 @@ from typing import NamedTuple, List, Callable, Union
 from enum import Enum
 
 
+
 class SinkModel(Enum):
     INACTIVE = 0
     ACCELERATION_FREE = 1
@@ -198,6 +199,21 @@ class Physics(NamedTuple):
     diagnostics: List[Diagnostic] = []
     """ Physics diagnostics to be returned when reductions are computed """
 
+    # # Ryan's edit
+    # INITIAL_SIGMA: float = 0.0
+    # """ Initial density as interpreted from mach number at a."""
+
+    # INITIAL_PRESSURE: float = 0.0
+    # """ Initial pressure as derived from mach number at a."""
+
+    # tmerge: float = 0.0
+    # """Merger time (in code units)"""
+
+    # vxkick: float = 0.0
+    # """Kick x velocity"""
+
+    # vykick: float = 0.0
+    # """Kick y velocity"""
     @property
     def num_particles(self):
         if self.point_mass_function is None:

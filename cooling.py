@@ -23,6 +23,7 @@ cgs = dict(
 		blackbodyconst2 = 4.79921e-11,
 		c2h3 = 2.61463e-58,
 		h_over_kb = 4.79921e-11,
+		year=31556952
 	)
 
 logger = getLogger(__name__)
@@ -37,7 +38,7 @@ class ShakuraSunyaevDisk(NamedTuple):
 
 	central_mass_msun : float
 	length_scale_pc   : float
-	mach_number_3a    : float
+	mach_number_a    : float
 	alpha             : float
 	gamma             : float
 
@@ -76,19 +77,19 @@ class ShakuraSunyaevDisk(NamedTuple):
 		"""
 		return 4 * pi * self._GM / cgs['kappa'] / cgs['c'] / self._accretion_efficiency
 
+
 	@property
 	def _eddington_fraction(self) -> float:
 		"""
-		Calculate the eddington fraction of a reference Shakura Sunyaev disk at r=3a. 
+		Calculate the eddington fraction of a reference Shakura Sunyaev disk at r=a. 
 
-		   f_edd = 10.26 * (mp^4 / kb^4 * sigmab / kappa * alpha)^(1/2) * (GM)^(7/4) * Mach(r)^-5 * r^(-1/4) / Mdot_edd
+		   f_edd = √(32𝛑^2/3) * (mp^4 / kb^4 * sigmab / kappa * alpha)^(1/2) * (GM)^(7/4) * Mach(r)^-5 * r^(-1/4) / Mdot_edd
 
 		This fraction of the eddington rate is returned
 		"""
 		f0 = 10.2604 * (cgs['mp']**4 / cgs['kb']**4 * cgs['sigmab'] / cgs['kappa'])**0.5 * self.gamma**(-2.)
-		rm = 3 * self._length
-		return (f0 * self.alpha**0.5 * self._GM**(7./4.) * self._length**(-1./4.) * self.mach_number_3a**-5
-		           / self._eddington_rate)
+		return f0 * self.alpha**0.5 * self._GM**(7./4.) * self._length**(-1./4.) * self.mach_number_a**-5 / self._eddington_rate
+
 	
 	@property
 	def _accretion_rate(self) -> float:
@@ -140,6 +141,12 @@ class ShakuraSunyaevDisk(NamedTuple):
 
 	def surface_pressure_profile(self, r:float) -> float:
 		return self.surface_pressure_coefficient * r**(-3./2.)
+
+	def mach_profile(self, r:float) -> float:
+		cs    = (self.gamma * (self.surface_pressure_profile(r) / self.surface_density_profile(r)))**0.5
+		Omega = r**(-3./2.)
+		Hs    = cs /Omega
+		return r / Hs
 
 	def optical_depth(self, r:float) -> float:
 		return cgs['kappa'] * self._surface_density * r**(-3./5.)
@@ -209,13 +216,29 @@ nu_infared_high = cgs['c'] / (7e-5)    # 700 nm = 7e-5 cm
 nu_optical_low  = cgs['c'] / (7e-5)    # 700 mm = 7e-5 cm
 nu_optical_high = cgs['c'] / (4e-5)    # 400 nm = 4e-5 cm
 
+nu_UV_low       = cgs['c'] / (4e-5)
+nu_UV_high      = cgs['c'] / (1e-6)
+
+nu_Xray_low     = cgs['c'] / (1e-6)
+nu_Xray_high    = cgs['c'] / (1e-9)
+
+def Energy_to_wavelength(E):
+	return (cgs['h'] * cgs['c']) / E 
+
+def Wavelength_to_energy(L):
+	return (cgs['h'] * cgs['c']) / L 
+
+ev = 1/624150907446
+#print('wavelength',Energy_to_wavelength(124000 * ev))
+
+
 def InfaredEmission(temperature, dx):
 	x_low  = cgs['h_over_kb'] * nu_infared_low  / temperature
 	x_high = cgs['h_over_kb'] * nu_infared_high / temperature
 
 	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
 
-	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integrand = x_grid**3 / np.expm1(x_grid)
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
@@ -229,16 +252,42 @@ def OpticalEmission(temperature, dx):
 
 	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
 
-	integrand = x_grid**3 / (np.exp(x_grid) - 1)
+	integrand = x_grid**3 / np.expm1(x_grid)
 	integral  = np.trapz(integrand, x_grid, axis = 0)
 
 	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
 	return np.pi * dx**2 * prefactor * integral
 
 
+def UVEmission(temperature, dx):
+	x_low  = cgs['h_over_kb'] * nu_UV_low  / temperature
+	x_high = cgs['h_over_kb'] * nu_UV_high / temperature
+
+	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
+
+	integrand = x_grid**3 / np.expm1(x_grid)
+	integral  = np.trapz(integrand, x_grid, axis = 0)
+
+	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
+	return np.pi * dx**2 * prefactor * integral 
 
 
+def XrayEmission(temperature, dx):
+	x_low  = cgs['h_over_kb'] * nu_Xray_low  / temperature
+	x_high = cgs['h_over_kb'] * nu_Xray_high / temperature
 
+	x_grid = np.logspace(np.log10(x_low), np.log10(x_high), 100)
+
+	integrand = x_grid**3 / np.expm1(x_grid)
+	integral  = np.trapz(integrand, x_grid, axis = 0)
+
+	prefactor = (2 * (cgs['kb'] * temperature)**4) / (cgs['c2h3'])
+	return np.pi * dx**2 * prefactor * integral 
+
+
+def PlanckSpectrum(nu, T, dx):
+	B_nu = ( 2 * cgs['h'] * nu ** 3 / cgs['c']**2 ) * 1 / (np.expm1(cgs['h'] * nu / (cgs['kb'] * T) ))
+	return np.pi * nu * B_nu * dx**2
 
 if __name__ == '__main__':
 	import numpy as np
@@ -248,14 +297,15 @@ if __name__ == '__main__':
 	ss = ShakuraSunyaevDisk(
         	central_mass_msun = 8e6, 
         	length_scale_pc   = 9.7e-4,
-        	mach_number_3a    = 21,
+        	mach_number_a     = 10,
         	alpha             = 0.1,
 			gamma             = 5./3.
         )
 	print("fedd : ", ss._eddington_fraction)
 
+
 	fcavity = 0.0001 + 0.9999 * np.exp(-((1.0 / r) ** 30))
-	fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=[5,8])
+	fig, [ax1, ax2, ax3, ax4] = plt.subplots(4, 1, sharex=True, figsize=[7,8])
 	ax1.plot(r, ss.surface_density_profile(r) * fcavity, c='C0')
 	ax1.plot(r, ss.surface_density_goodman() / (ss._mass / ss._length**2) * r**(-3./5.) * fcavity, c='C1', ls='--')
 	ax1.plot(r, 0.057 * r**(-3./5.) * fcavity, c='C3')
@@ -267,10 +317,15 @@ if __name__ == '__main__':
 	ax3.plot(r, ss.surface_pressure_profile(r) / ss.surface_density_profile(r), c='C0')
 	ax3.plot(r, 6.7e-5 * r**(-3./2.) / (0.057 * r**(-3./5.)), c='C3')
 
+	ax4.plot(r, ss.mach_profile(r), c='silver')
+	ax4.set_ylim([0, ss.mach_profile(0.1)])
+
 	ax1.set_ylabel(r'$\Sigma$')
 	ax2.set_ylabel(r'$P$')
 	ax3.set_ylabel(r'$c_s^2$')
+	ax4.set_ylabel(r'$\mathcal{M}$')
 	ax3.set_xlabel(r'$r$')
+	ax4.set_xlabel(r'$r$')
 
 	plt.tight_layout()
 	plt.subplots_adjust(hspace=0.1)

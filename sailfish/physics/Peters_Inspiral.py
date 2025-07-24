@@ -23,7 +23,7 @@ class Orbital_Inspiral():
             return -a_dot_prefactor * eccentricity_factor / (a **3) / ((1-e**2) ** (7./2.)) #* 10
     	
         def Eccentricity_Decay_Rate(a,e):
-       	    e_dot_prefactor     = 304. /15. * GM**3 * mass_ratio / (1 + mass_ratio)**2 / speed_of_light**5
+            e_dot_prefactor     = 304. /15. * GM**3 * mass_ratio / (1 + mass_ratio)**2 / speed_of_light**5
             eccentricity_factor = e * (1 + 121/304 * e**2) / ((1-e**2) ** (5./2.))
             return -e_dot_prefactor * eccentricity_factor / a**4  #* 1
 
@@ -37,7 +37,7 @@ class Orbital_Inspiral():
         e_old        = init_eccentricity
 
 
-        while a_old > 0.03:
+        while a_old > 0.04:
             # RK4 integration
             k1_a = SemiMajorAxis_Decay_Rate(a_old , e_old)
             k1_e = Eccentricity_Decay_Rate( a_old , e_old)
@@ -62,13 +62,14 @@ class Orbital_Inspiral():
 
             a_new = a_old + (timestep / 6.0) * (k1_a + 2*k2_a + 2*k3_a + k4_a)
             e_new = e_old + (timestep / 6.0) * (k1_e + 2*k2_e + 2*k3_e + k4_e)
-
+            diff = a_new - a_old
+            if diff > 0:
+                break
             if isinstance(a_new, complex) or isinstance(e_new, complex):
                 break
             
             if a_new < 0 or e_new < 0:
                 break
-
 
             # store values
             self.a_array.append(a_new)
@@ -112,10 +113,11 @@ class Orbital_Inspiral():
     
 
 
-
-
-
-#Binary_Orbital_Elements = Orbital_Inspiral(GM = 1,mass_ratio = 1,speed_of_light = 1e1,init_eccentricity= 0.8,init_semimajoraxis= 1, timestep = 1e-1, plot_inspiral = True)
+# Orbit_Elements = Orbital_Inspiral(GM = 1, mass_ratio =1,speed_of_light = 50**0.5,init_eccentricity = 0.4,init_semimajoraxis=1,timestep=0.005,plot_inspiral=True)
+# Orbit_Elements = Orbital_Inspiral(GM = 1, mass_ratio =1,speed_of_light = 50**0.5,init_eccentricity = 0.0,init_semimajoraxis=1,timestep=0.005,plot_inspiral=True)
+# plt.legend()
+# plt.axis([0,1000,0,1.5])
+# plt.show() 
 #print(Binary_Orbital_Elements.semimajoraxis)
 #print(Binary_Orbital_Elements.eccentricity)
 

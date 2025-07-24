@@ -15,7 +15,9 @@ from sailfish.physics.circumbinary import (
 )
 from sailfish.solver_base import SolverBase
 from sailfish.subdivide import subdivide, to_host, concat_on_host, lazy_reduce
-from cooling import OpticalEmission, InfaredEmission, cgs, EffectiveTemperature
+from cooling import OpticalEmission, InfaredEmission, UVEmission, XrayEmission, cgs, EffectiveTemperature
+# Ryan's edit:
+
 import numpy as np
 import warnings
 
@@ -28,7 +30,9 @@ class Options(NamedTuple):
     density_floor: float = 1e-10
     velocity_ceiling: float = 1e16
     mach_ceiling: float = 1e5
-
+    sink_emission: bool = True
+    centered_emission: bool = False # Ryan's edit: emission only on the central region to avoid edge effects.
+    centered_emission_radius: float = 5.0
 
 def initial_condition(setup, mesh, time):
     """
@@ -146,7 +150,7 @@ class Patch:
                 self.physics.gamma_law_index,
             )
             return cons_rate[ng:-ng, ng:-ng]
-
+        
     def maximum_wavespeed(self):
         with self.execution_context:
             self.lib.cbdgam_2d_wavespeed[self.shape](
@@ -163,7 +167,7 @@ class Patch:
                 self.conserved0,
                 self.physics.gamma_law_index,
             )
-
+    # Ryan's edit: adding time in buffer_source_term
     def advance_rk(self, rk_param, dt):
         m1, m2 = self.physics.point_masses(self.time)
         buffer_central_mass = m1.mass + m2.mass
@@ -215,7 +219,13 @@ class Patch:
                 self.options.density_floor,
                 self.options.pressure_floor,
                 int(self.physics.constant_softening),
-            )
+                # self.time, # Ryan's edit: either time or time0. Need to test
+                # self.physics.tmerge,
+                # self.physics.INITIAL_SIGMA,
+                # self.physics.INITIAL_PRESSURE,
+                # self.physics.vxkick,
+                # self.physics.vykick
+                )
 
         self.time = self.time0 * rk_param + (self.time + dt) * (1.0 - rk_param)
         self.primitive1, self.primitive2 = self.primitive2, self.primitive1
@@ -288,21 +298,25 @@ class Solver(SolverBase):
         self.xp = xp
         self.patches = []
         ni, nj = mesh.shape
-        self.domain_radius = self.mesh.x1
+        self.domain_radius = (self.mesh.x1 - self.mesh.x0) / 2
         self.buffer_onset_width = 0.1
         self.infared_cache = None
         self.optical_cache = None
+        self.uv_cache      = None
+        self.xray_cache    = None
 
         if solution is None:
             primitive = initial_condition(setup, mesh, time)
         else:
             primitive = solution
 
-        if physics.buffer_is_enabled:
+        if physics.buffer_is_enabled: # Ryan: may need editing here.
             # Here we sample the initial condition at the buffer onset radius
             # to determine the disk surface density at the radius where the
             # buffer begins to ramp up. This procedure makes sense as long as
             # the initial condition is axisymmetric.
+            # Ryan: Added buffers after the kick. At this point buffer_surface quantities
+            # are no longer needed.
             buffer_prim = [0.0] * 4
             buffer_outer_radius = mesh.x1  # this assumes the mesh is a centered squared
             buffer_onset_radius = buffer_outer_radius - physics.buffer_onset_width
@@ -351,10 +365,6 @@ class Solver(SolverBase):
     def Length_Scale_CGS(self):
          return self.setup.length_scale_pc * cgs['pc']
 
-    #@property
-    #def Cell_Length_CGS(self):
-    #    return (self.setup.length_scale_pc * cgs['pc']) * self.mesh.dx
-
     @property
     def kb_code(self):
         return cgs['kb'] / (self.setup.SS73._mass * self.setup.SS73._length**2 / self.setup.SS73._time**2)
@@ -366,8 +376,20 @@ class Solver(SolverBase):
     @property
     def kappa_code(self):
         return cgs['kappa'] / (self.setup.SS73._length**2 / self.setup.SS73._mass)
-
     
+    # @property
+    # def point_mass_distance(self):
+    #     x_, y_           = patch.cell_center_coordinate_arrays
+    #     x, y             = x_[-1,0]*self.xp.ones(np.shape(x_)[0]+4) ,  y_[0,-1]*self.xp.ones(np.shape(y_)[1]+4)
+    #     x[2:-2]          = x_[:,0]
+    #     y[2:-2]          = y_[0,:]
+    #     X, Y             = np.meshgrid(x, y, indexing='ij')
+
+    #     m1, m2  = patch.physics.point_masses(patch.time)
+    #     r1      = ((X-m1.position_x)**2 + (Y-m1.position_y)**2) 
+    #     r2      = ((X-m2.position_x)**2 + (Y-m2.position_y)**2) 
+    #     return r1, r2
+
     @property
     def Precompute_Band_Luminosities(self):
         logT_low  = 0
@@ -388,7 +410,19 @@ class Solver(SolverBase):
         else:
             pass
 
-        return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache)]
+        if self.uv_cache is None:
+            uv_emission   = UVEmission(Temperature_Range, self.Length_Scale_CGS)
+            self.uv_cache = uv_emission
+        else:
+            pass
+
+        if self.xray_cache is None:
+            xray_emission   = XrayEmission(Temperature_Range, self.Length_Scale_CGS)
+            self.xray_cache = xray_emission
+        else:
+            pass
+
+        return [Temperature_Range, Log_Temperature_Diff, np.asarray(self.optical_cache), np.asarray(self.infared_cache), np.asarray(self.uv_cache), np.asarray(self.xray_cache)]
 
 
     def detect_density_floor(self, patch):
@@ -401,12 +435,12 @@ class Solver(SolverBase):
         mask     = pressure <= patch.options.pressure_floor * 1.01
         return mask.sum() ## Return and check this sum over patches. Is it multiplied by da? If not is it a bottleneck?
 
-
     def Interpolate_Band_Luminosity(self, patch):
-        Precomputed      = self.Precompute_Band_Luminosities
-        Precomputed      = list(Precomputed)
+        Precomputed      = list(self.Precompute_Band_Luminosities)
         Precomputed[2]   = self.xp.asarray(Precomputed[2])
         Precomputed[3]   = self.xp.asarray(Precomputed[3])
+        Precomputed[4]   = self.xp.asarray(Precomputed[4])
+        Precomputed[5]   = self.xp.asarray(Precomputed[5])
         Precomputed_low  = self.xp.log10(Precomputed[0][0])
         Precomputed_high = self.xp.log10(Precomputed[0][-1])
 
@@ -414,32 +448,78 @@ class Solver(SolverBase):
         T                = self.xp.maximum((patch.primitive[:, :, 3] / Sigma) * (self.mp_code / self.kb_code), 10**Precomputed_low)
         optical_depth    = Sigma * self.kappa_code
 
+        # Note that the temperature mapping only occurs on the effective temperature, not the actual temperature. Hence
+        # the code unit optical depth is used to compute the surface temperature before the mapping is applied
         Teff                  = EffectiveTemperature(optical_depth, T)
         RescaledTemp          = Teff * self.setup.AccretionRateRescaling ** 0.25
+        RescaledDepth         = optical_depth * self.setup.AccretionRateRescaling 
         Bolometric_Luminosity = 2 * cgs['sigmab'] * RescaledTemp ** 4 * self.Length_Scale_CGS**2
 
-        transparent_mask = (optical_depth >= 1.0)#.astype(self.xp.float64)
-        mask_all_vals_if = (RescaledTemp * transparent_mask >= 1.01)#.astype(self.xp.float64)
-        # High temp cutoff??
+
+
+        if not patch.options.sink_emission: #sink emission is covered: mask sink emission
+            x_, y_           = patch.cell_center_coordinate_arrays
+            x, y             = x_[-1,0]*self.xp.ones(np.shape(x_)[0]+4) ,  y_[0,-1]*self.xp.ones(np.shape(y_)[1]+4)
+            x[2:-2]          = x_[:,0]
+            y[2:-2]          = y_[0,:]
+            X, Y             = np.meshgrid(x, y, indexing='ij')
+            m1, m2  = patch.physics.point_masses(patch.time)
+            r1_mask = ((X-m1.position_x)**2 + (Y-m1.position_y)**2) > m1.sink_radius**2
+            r2_mask = ((X-m2.position_x)**2 + (Y-m2.position_y)**2) > m2.sink_radius**2
+
+        else: #Preserve the whole grid
+            r1_mask = 1
+            r2_mask = 1
+
+        if patch.options.centered_emission: #centered emission
+            primary, secondary = patch.physics.point_masses(patch.time)
+            xprim, yprim = primary.position_x, primary.position_y
+            xsec, ysec = secondary.position_x, secondary.position_y
+
+            x_, y_           = patch.cell_center_coordinate_arrays
+            x, y             = x_[-1,0]*self.xp.ones(np.shape(x_)[0]+4) ,  y_[0,-1]*self.xp.ones(np.shape(y_)[1]+4)
+            x[2:-2]          = x_[:,0]
+            y[2:-2]          = y_[0,:]
+            X, Y             = np.meshgrid(x, y, indexing='ij')
+
+            xcenter = (xprim + xsec) / 2
+            ycenter = (yprim + ysec) / 2
+            center_mask = ((X - xcenter)**2 + (Y - ycenter)**2) <= patch.options.centered_emission_radius**2
+        else:
+            center_mask = 1
+
+
+        transparent_mask = (RescaledDepth >= 10.0)
+        mask_interp_min  = (RescaledTemp * transparent_mask >= 1.01 * 10**Precomputed_low) # Rescaled Temperatures should not be below interpolation minimum
+        mask             = r1_mask * r2_mask * mask_interp_min * center_mask
 
         Progress         = (self.xp.log10(RescaledTemp) - Precomputed_low)/ Precomputed[1]
         N0               = self.xp.floor(Progress).astype(int)
         Bracket_N0_N1    = Progress - N0
 
         try:
-            Optical_N0 = self.xp.take(Precomputed[2], N0, axis=0)
+            Optical_N0 = self.xp.take(Precomputed[2],N0, axis=0)
             Optical_N1 = self.xp.take(Precomputed[2],N0+1,axis=0)
             Infared_N0 = self.xp.take(Precomputed[3],N0  ,axis=0)
             Infared_N1 = self.xp.take(Precomputed[3],N0+1,axis=0)
+            UV_N0      = self.xp.take(Precomputed[4],N0  ,axis=0)
+            UV_N1      = self.xp.take(Precomputed[4],N0+1,axis=0)
+            Xray_N0    = self.xp.take(Precomputed[5],N0  ,axis=0)
+            Xray_N1    = self.xp.take(Precomputed[5],N0+1,axis=0)
 
             Interpolated_Optical = Optical_N0 + Bracket_N0_N1 * (Optical_N1-Optical_N0)
             Interpolated_Infared = Infared_N0 + Bracket_N0_N1 * (Infared_N1-Infared_N0)
+            Interpolated_UV      = UV_N0      + Bracket_N0_N1 * (UV_N1-UV_N0)
+            Interpolated_Xray    = Xray_N0    + Bracket_N0_N1 * (Xray_N1-Xray_N0)
 
-            Interpolated_Optical  *= mask_all_vals_if
-            Interpolated_Infared  *= mask_all_vals_if
-            Bolometric_Luminosity *= mask_all_vals_if
+            Interpolated_Optical  *= mask
+            Interpolated_Infared  *= mask
+            Interpolated_UV       *= mask
+            Interpolated_Xray     *= mask
+            Bolometric_Luminosity *= mask
 
-            return Interpolated_Optical, Interpolated_Infared, Bolometric_Luminosity, sum(~mask_all_vals_if)
+            #return Interpolated_Optical, Interpolated_Infared, Bolometric_Luminosity, sum(~mask_all_vals_if)
+            return Interpolated_Infared, Interpolated_Optical, Interpolated_UV, Interpolated_Xray, Bolometric_Luminosity, sum(~mask_interp_min), self.xp.max(RescaledTemp)
         
         except IndexError as e:
             if self.xp.max(RescaledTemp) > self.Precompute_Band_Luminosities[0][-2]:
@@ -448,22 +528,31 @@ class Solver(SolverBase):
             elif np.min(Sigma) == 0.0:
                 logger.info(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
                 warnings.warn(f"Lightcurve reductions failed at time={self.time:0.4f} due to zero surface density")
-                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma)
+                return self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), self.xp.zeros_like(Sigma), sum(~mask_interp_min), 0
             else:
                 print('SOMETHING ELSE WENT WRONG, FIGURE IT OUT.')
             
 
-    def optical_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[0]
-
     def infared_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[1]
+        return 2 * self.Interpolate_Band_Luminosity(patch)[0]
+    
+    def optical_luminosity(self,patch):
+        return 2 * self.Interpolate_Band_Luminosity(patch)[1]
+    
+    def uv_luminosity(self,patch):
+        return 2 * self.Interpolate_Band_Luminosity(patch)[2]
+    
+    def xray_luminosity(self,patch):
+        return 2 * self.Interpolate_Band_Luminosity(patch)[3]
     
     def bolometric_luminosity(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[2]
+        return self.Interpolate_Band_Luminosity(patch)[4]
     
     def Uncounted_Cells(self,patch):
-        return self.Interpolate_Band_Luminosity(patch)[3].sum()
+        return self.Interpolate_Band_Luminosity(patch)[5].sum()
+    
+    def MaxTemperature(self,patch):
+        return self.Interpolate_Band_Luminosity(patch)[6] 
     
 
     def reductions(self):
@@ -486,7 +575,8 @@ class Solver(SolverBase):
             """
             x, y = patch.cell_center_coordinate_arrays
             r = (x**2 + y**2) ** 0.5
-
+            # Ryan: Would this have a problem? Here x and y are calculated from the center. Should be from the individual
+            # masses. mass
             def apply_radial_cut(f):
                 if cut is not None:
                     r0, r1 = cut
@@ -582,6 +672,14 @@ class Solver(SolverBase):
                         f = self.infared_luminosity(p)
                         result.append(f.sum())
 
+                    elif d.quantity == "uv":
+                        f = self.uv_luminosity(p)
+                        result.append(f.sum())
+
+                    elif d.quantity == "xray":
+                        f = self.xray_luminosity(p)
+                        result.append(f.sum())
+
                     elif d.quantity == "bolometric":
                         f = self.bolometric_luminosity(p)
                         result.append(f.sum())
@@ -625,6 +723,8 @@ class Solver(SolverBase):
                 pass1.append(float(sum(self.detect_pressure_floor(p) for p in self.patches))) # double check again
             elif d.quantity == 'uncounted_cells_in_lc':
                 pass1.append(float(sum(self.Uncounted_Cells(p) for p in self.patches))) # double check again
+            elif d.quantity == 'max_temperature':
+                pass1.append(float(max(self.MaxTemperature(p) for p in self.patches)))
 
             
 

@@ -290,6 +290,7 @@ class DriverArgs(NamedTuple):
             setup_name=setup_name,
             chkpt_file=chkpt_file,
             model_parameters=model_parameters,
+
         )
 
 
@@ -438,7 +439,10 @@ def simulate(driver):
 
     mode = driver.execution_mode or "cpu"
     fold = driver.fold or 10
-    mesh = setup.mesh(driver.resolution)
+    if driver.chkpt_file:
+        mesh = chkpt["mesh"]
+    elif driver.setup_name:
+        mesh = setup.mesh(driver.resolution)
     end_time = first_not_none(driver.end_time, setup.default_end_time, float("inf"))
         
 
@@ -478,14 +482,21 @@ def simulate(driver):
 
     for name, event in driver.events.items():
         logger.info(f"recurrence for {name} event is {event}")
-
-    logger.info(f"Inspiral timescale is {driver.model_parameters['gw_inspiral_time']/2/3.14159265359:0.2f} orbits")
-    logger.info(f"run until t={end_time}")
-    logger.info(f"CFL number is {cfl_number}")
-    logger.info(f"simulation time / user time is {reference_time:0.4f}")
-    logger.info(f"recompute dt every {new_timestep_cadence} iterations")
-    logger.info(f"solver options {solver.options}")
-    #setup.print_model_parameters(newlines=True, logger=main_logger)
+    if ((driver.setup_name == 'cool-inspiral') or (driver.setup_name == 'binary-inspiral')): 
+        logger.info(f"Inspiral timescale is {driver.model_parameters['gw_inspiral_time']/2/3.14159265359:0.2f} orbits")
+        logger.info(f"run until t={end_time}")
+        logger.info(f"CFL number is {cfl_number}")
+        logger.info(f"simulation time / user time is {reference_time:0.4f}")
+        logger.info(f"recompute dt every {new_timestep_cadence} iterations")
+        logger.info(f"solver options {solver.options}")
+        # setup.print_model_parameters(newlines=True, logger=main_logger)
+    else:
+        logger.info(f"run until t={end_time}")
+        logger.info(f"CFL number is {cfl_number}")
+        logger.info(f"simulation time / user time is {reference_time:0.4f}")
+        logger.info(f"recompute dt every {new_timestep_cadence} iterations")
+        logger.info(f"solver options {solver.options}")
+        # setup.print_model_parameters(newlines=True, logger=main_logger)
 
     def grab_state():
         """
@@ -535,7 +546,15 @@ def simulate(driver):
                 if dt is None or (iteration % new_timestep_cadence == 0):
                     dx = mesh.min_spacing(siml_time)
                     dt = dx / solver.maximum_wavespeed() * cfl_number
-                solver.advance(dt)
+                if dt > 1e-10:
+                    solver.advance(dt)
+                else:
+                    logger.warning(
+                        f"timestep dt={dt:.3e} is too small, ending simulation"
+                    )
+                    import sys
+                    sys.exit(0)
+
                 iteration += 1
 
         Mzps = mesh.num_total_zones / fold_time() * 1e-6 * fold
