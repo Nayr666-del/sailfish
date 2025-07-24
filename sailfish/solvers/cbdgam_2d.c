@@ -162,8 +162,10 @@ PRIVATE void point_mass_source_term(
             double vx = prim[1];
             double vy = prim[2];
             delta_cons[0] = dt * mdot;
+            // This here too.
             delta_cons[1] = dt * mdot * prim[1] + dt * fx;
             delta_cons[2] = dt * mdot * prim[2] + dt * fy;
+            // Needs to be checked. It seems when mdot=0 energy term is removed from the origin.
             delta_cons[3] = dt * (mdot * eps + 0.5 * mdot * (vx * vx + vy * vy)) + dt * (fx * vx + fy * vy);
             break;
         }
@@ -237,7 +239,72 @@ PRIVATE double sound_speed_squared(
 {
     return prim[3] / prim[0] * gamma_law_index;
 }
+//Ryan's edit from Luke's version -- might need to edit out
+// What is initial density? Could be hard-coded, ask David
+// Ryan's notes: time is time - tmerge, somehow encode this
+// or have to hard-code it.
+// PRIVATE double translated_density(
+//     double xc,
+//     double yc,
+//     double time,
+//     double tmerge,
+//     double vxkick,
+//     double vykick,
+//     double initial_density)
+// {
+//     double x_kicked = xc - vxkick * (time - tmerge);
+//     double y_kicked = yc - vykick * (time - tmerge);
+//     double r_kicked = sqrt(x_kicked * x_kicked + y_kicked * y_kicked);
+//     return initial_density * pow(r_kicked, -3.0 / 5.0);
+// }
 
+// PRIVATE double translated_pressure(
+//     double xc,
+//     double yc,
+//     double time,
+//     double tmerge,
+//     double vxkick,
+//     double vykick,
+//     double initial_pressure)
+// {
+//     double x_kicked = xc - vxkick * (time - tmerge);
+//     double y_kicked = yc - vykick * (time - tmerge);
+//     double r_kicked = sqrt(x_kicked * x_kicked + y_kicked * y_kicked);
+//     return initial_pressure * pow(r_kicked, -3.0 / 2.0);
+// }
+// // corrections to vx
+// PRIVATE double translated_vx(
+//     double xc,
+//     double yc,
+//     double time,
+//     double tmerge,
+//     double vxkick,
+//     double vykick)
+// {
+//     double x_kicked = xc - vxkick * (time - tmerge);
+//     double y_kicked = yc - vykick * (time - tmerge);
+//     double r_kicked = sqrt(x_kicked * x_kicked + y_kicked * y_kicked);
+//     double GM = 1.0;
+//     return sqrt(GM / r_kicked) * (-y_kicked / (r_kicked + 1e-12)) + vxkick;
+// }
+
+// PRIVATE double translated_vy(
+//     double xc,
+//     double yc,
+//     double time,
+//     double tmerge,
+//     double vxkick,
+//     double vykick)
+// {
+//     double x_kicked = xc - vxkick * (time - tmerge);
+//     double y_kicked = yc - vykick * (time - tmerge);
+//     double r_kicked = sqrt(x_kicked * x_kicked + y_kicked * y_kicked);
+//     double GM = 1.0;
+//     return sqrt(GM / r_kicked) * (x_kicked / (r_kicked + 1e-12)) + vykick;
+// }
+
+// Ryan: Currently modified for kicking gas in the +y direction
+// Kick velocity and direction is currently hard-coded
 PRIVATE void buffer_source_term(
     struct KeplerianBuffer *buffer,
     double xc,
@@ -245,10 +312,17 @@ PRIVATE void buffer_source_term(
     double dt,
     double *cons,
     double gamma_law_index)
+    // double time,
+    // double tmerge, // could be hard-coded
+    // double INITIAL_SIGMA, // Initial density and pressure (should be calculated from mach_a = 10. Could be hard-coded)
+    // double INITIAL_PRESSURE,
+    // double vxkick,
+    // double vykick
+    // Ryan's edits
 {
     if (buffer->is_enabled)
     {
-        double rc = sqrt(xc * xc + yc * yc);
+        double rc = sqrt(xc * xc + yc * yc); // Coordinates on the grid. These do not change
         double surface_density = buffer->surface_density;
         double surface_pressure = buffer->surface_pressure;
         double central_mass = buffer->central_mass;
@@ -256,13 +330,37 @@ PRIVATE void buffer_source_term(
         double outer_radius = buffer->outer_radius;
         double onset_width = buffer->onset_width;
         double onset_radius = outer_radius - onset_width;
-
+        // Ryan's edit
+        // Idea: maintain stable original profile at the boundaries instead of sampling
         if (rc > onset_radius)
         {
+            // if (time >= tmerge){
+            //     // double vkick = 0.0124922; // Ryan: 530km/s in code units
+            //     // Ryan: allows for direction of the kick to be varied
+            //     double dens = translated_density(xc, yc, time, tmerge, vxkick, vykick, INITIAL_SIGMA);
+            //     double pres = translated_pressure(xc, yc, time, tmerge, vxkick, vykick, INITIAL_PRESSURE);
+            //     double vx = translated_vx(xc, yc, time, tmerge, vxkick, vykick);
+            //     double vy = translated_vy(xc, yc, time, tmerge, vxkick, vykick);
+
+            //     double px = dens * vx; // dens and vx already translated
+            //     double py = dens * vy; // dens and vy already translated
+            //     double kinetic_energy = 0.5 * (px * px + py * py) / dens; // Translated kinetic energy at the buffer
+            //     double energy = pres / (gamma_law_index - 1.0) + kinetic_energy;
+            //     double u0[NCONS] = {dens, px, py, energy}; // Ryan: The line below modies the "new" radii fromt he center of the Keplerian disk
+            //     double new_radii = sqrt((xc - vxkick * (time - tmerge)) * (xc - vxkick * (time - tmerge)) + (yc - vykick * (time - tmerge)) * (yc - vykick * (time - tmerge)));
+            //     double omega_outer = sqrt(central_mass * pow(new_radii, -3.0));
+            //     double buffer_rate = driving_rate * omega_outer * (rc - onset_radius) / onset_width;
+
+            //     for (int q = 0; q < NCONS; ++q)
+            //     {
+            //         cons[q] -= (cons[q] - u0[q]) * buffer_rate * dt;
+            //     }
+            // }
+            // else{
             double v_kep = sqrt(central_mass / rc);
-            if (buffer->is_retrograde)
+            if (buffer->is_retrograde){
                 v_kep = -v_kep;
-            //double pf = surface_density * sqrt(central_mass / rc);
+            }
             double px = surface_density * (-yc / rc) * v_kep;
             double py = surface_density * (+xc / rc) * v_kep;
             double kinetic_energy = 0.5 * (px * px + py * py) / surface_density;
@@ -270,7 +368,6 @@ PRIVATE void buffer_source_term(
             double u0[NCONS] = {surface_density, px, py, energy};
 
             double omega_outer = sqrt(central_mass * pow(onset_radius, -3.0));
-            //double buffer_rate = driving_rate * omega_outer * max2(rc, 1.0);
             double buffer_rate = driving_rate * omega_outer * (rc - onset_radius) / (outer_radius - onset_radius);
 
             for (int q = 0; q < NCONS; ++q)
@@ -352,13 +449,13 @@ PRIVATE void conserved_to_primitive(
     prim[2] = vy;
     prim[3] = pres;
 
-    double r = sqrt(xc * xc + yc * yc + 1e-12);
-    double h = disk_height(mass_list, xc, yc, prim, gamma_law_index);
+    // double r = sqrt(xc * xc + yc * yc + 0.04 * 0.04); // HRMAX might affect stuff
+    // double h = disk_height(mass_list, xc, yc, prim, gamma_law_index);
 
-    if (h / r > HRMAX) {
-    	double omega_tilde = sqrt(gamma_law_index * pres / rho) / h;
-    	prim[3] = rho / gamma_law_index * pow(r * omega_tilde * HRMAX, 2.0);
-    }
+    // if (h / r > HRMAX) {
+    //   	double omega_tilde = sqrt(gamma_law_index * pres / rho) / h;
+    //   	prim[3] = rho / gamma_law_index * pow(r * omega_tilde * HRMAX, 2.0);
+    // }
 }
 
 PRIVATE void primitive_to_conserved(const double *prim, double *cons, double gamma_law_index)
@@ -499,6 +596,13 @@ PUBLIC void cbdgam_2d_advance_rk(
     double density_floor,
     double pressure_floor,
     int constant_softening)
+    // double time, // Ryan's edit:
+    // double tmerge, // Ryan: Merger time can be passed through in the python file
+    // double INITIAL_SIGMA,
+    // double INITIAL_PRESSURE,
+    // double vxkick,
+    // double vykick
+    // Ryan: Passed on from the python file 
 {
     struct KeplerianBuffer buffer = {
         buffer_surface_density,
@@ -684,9 +788,16 @@ PUBLIC void cbdgam_2d_advance_rk(
             flj[3] -= 0.5 * (nulj * plj[0] * slj[3] * plj[2] + nucc * pcc[0] * scc[3] * pcc[2]); // v^y \tau^y_y
             frj[3] -= 0.5 * (nucc * pcc[0] * scc[3] * pcc[2] + nurj * prj[0] * srj[3] * prj[2]);
         }
-
+        // Ryan's edit: adding time in buffer_source_term
+        // Need to somehow include initial pressure and density
+        // static int flag = 1;
+        // if ((flag==1) && (time >= tmerge)){
+        //     pcc[2] = pcc[2] + vykick;
+        //     pcc[1] = pcc[1] + vxkick;
+        //     flag = 0;
+        // }
         primitive_to_conserved(pcc, ucc, gamma_law_index);
-        buffer_source_term(&buffer, xc, yc, dt, ucc, gamma_law_index);
+        buffer_source_term(&buffer, xc, yc, dt, ucc, gamma_law_index); // Ryan: time and tmerge
         point_masses_source_term(&mass_list, xc, yc, dt, pcc, hcc, ucc, constant_softening, gamma_law_index);
         cooling_term(cooling_coefficient, mach_ceiling, dt, pcc, ucc, gamma_law_index);
 
@@ -698,8 +809,10 @@ PUBLIC void cbdgam_2d_advance_rk(
 
         double *pout = &primitive_wr[ncc];
         conserved_to_primitive(ucc, pout, &mass_list, xc, yc, velocity_ceiling, density_floor, pressure_floor, gamma_law_index);
+        // Ryan's impelemntation: kick the gas up in y. Might need corrections. static makes sure it's only kicked once
     }
 }
+
 
 PUBLIC void cbdgam_2d_wavespeed(
     int ni,
