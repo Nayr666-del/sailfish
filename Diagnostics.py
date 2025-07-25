@@ -7,13 +7,9 @@ import os
 import argparse
 from sailfish.setup_base import SetupBase
 from sailfish.physics.kepler import OrbitalState, PointMass
-<<<<<<< HEAD
-import scipy
-=======
 import matplotlib
 # matplotlib.use('Agg')  # Use Agg backend for non-interactive plotting
 from cooling import cgs
->>>>>>> CoolInspiral
 
 
 class FixNumpyCoreUnpickler(pk.Unpickler):
@@ -98,11 +94,7 @@ class DavidTimeseries:
 
     @property
     def buffer_delta_j(self):
-<<<<<<< HEAD
-    	return self.torque_a * self.dt
-=======
         return self.torque_a * self.dt
->>>>>>> CoolInspiral
 
     @property
     def total_angular_momentum(self):
@@ -402,7 +394,7 @@ if __name__ == '__main__':
             CurrentTime = to_real_time(CurrentTime, a0, M) / 24 / 3600
             Number_of_Orbits = to_real_time(Number_of_Orbits, a0, M) / 24 / 3600
         plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
-        # plt.plot(ts.time,(ts.mdot1+ts.mdot2)/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
+        #plt.plot(ts.time,(ts.mdot1+ts.mdot2)/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
 
         if args.Real_Time:
             plt.xlabel('Time (days)')
@@ -416,7 +408,7 @@ if __name__ == '__main__':
         except:
             pass
        
-        #plt.ylim([0,2])
+        plt.ylim([10e-6,5])
         if CurrentTime < Number_of_Orbits:
             plt.xlim([0,CurrentTime])
         else:

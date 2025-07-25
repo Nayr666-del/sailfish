@@ -887,6 +887,9 @@ def main():
                 or (driver.chkpt_file and os.path.dirname(driver.chkpt_file))
                 or "."
             )
+
+            MP = driver.model_parameters
+            epsilon = MP['epsilon']
             
             if driver.setup_name != None:
                 setup = SetupBase.find_setup_class(driver.setup_name)(
@@ -944,6 +947,26 @@ def main():
                 driver.model_parameters["inspiral_time_list"]   = list(Integrated_Orbit["TimeDomain"])
                 driver.model_parameters["gw_inspiral_time"]     = float(round(Integrated_Orbit["TimeDomain"][-1],4))
                 driver.model_parameters["Eccentric_Anomalies"]  = Integrated_Orbit["Eccentric_Anomalies"] 
+                # Ryan: needs density profile and the corresponding pressure profile from density.
+                # How to do this?
+                if epsilon != 0.0:
+                    from sailfish.physics.ShockedBoundary import ML_Boundaries
+                    import numpy as np
+                    from scipy.optimize import root_scalar
+                    from cooling import ShakuraSunyaevDisk
+                    r_buffer = MP['domain_radius']
+                    timestep = MP['buffer_timestep']
+                    Merge_time = MP["inspiral_start_time"] * 2 * np.pi + MP["inspiral_time_list"]
+
+                    t_end = driver.end_time
+                    if Inspiral_Flag:
+                        t_list = np.arange(0,timestep,t_end - Merge_time+0.01)
+                    else:
+                        t_list = np.arange(0,timestep,t_end)
+                    Boundaries_OI = ML_Boundaries(r_buffer,epsilon,t_list)
+                driver.model_parameters["buffer_sigma_list"] = Boundaries_OI.shocked_conditions
+
+
 
 
 

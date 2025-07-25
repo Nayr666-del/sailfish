@@ -612,7 +612,7 @@ def main_cbdgam_2d():
         xspace = np.linspace(mesh.x0, mesh.x1,ni)
         yspace = np.linspace(mesh.y0, mesh.y1,nj)            
         X, Y = np.meshgrid(xspace,yspace)
-        r_edge = 10.0
+        r_edge = chkpt["model_parameters"]["domain_radius"]
         # y_index_edge = int(y1 / mesh.dy)
 
         theta = np.deg2rad(90)
@@ -632,7 +632,8 @@ def main_cbdgam_2d():
         plt.legend()
         plt.xlabel('r')
         plt.ylabel(r'$\rho$')   
-        plt.yscale('log') 
+        # plt.yscale('log')
+        # plt.xscale('log') 
         plt.xlim(0,r_edge)
         plt.title(r'Radial Profile at $\theta$ = %g'%(np.rad2deg(theta)))
 
