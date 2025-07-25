@@ -6,12 +6,10 @@ class ML_Boundaries():
         r_buffer,
         em,
         t_list,
-        Sigma_Profile
         ):
         self.r_buffer = r_buffer
         self.em = em
         self.t_list = t_list
-        self.Sigma_Profile = Sigma_Profile
 
 
     def epi(self,r0, t, em):
@@ -20,7 +18,7 @@ class ML_Boundaries():
     def S(self,r0,t,em):
         return np.abs(1 + 2 * em * (1 - np.cos((1-2*em) * t / r0**1.5)) - 3/2 * em * r0**(-1.5) * t * np.sin((1-2*em) * t / r0**1.5))
     
-
+    @property
     def shocked_conditions(self):
         r0_vals = np.linspace(self.r_buffer * 1.1, self.r_buffer / (1+2*self.em) * 0.9, 1000)  # Avoid r0=0 to prevent division by zero
         tol = 1e-5
@@ -42,7 +40,7 @@ class ML_Boundaries():
                     except ValueError:
                         pass  # Skip if root finding failed
             for r_roots in found_roots:
-                SS_new[count] += self.Sigma_Profile(r_roots) / self.S(r_roots,t,self.em) 
+                SS_new[count] += 1.89e-4 * r_roots ** (-3/5) / self.S(r_roots,t,self.em) #Currently hard-coded
 
 
         return SS_new
