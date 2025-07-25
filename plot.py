@@ -183,6 +183,11 @@ def main_cbdgam_2d():
         type=float,
         help="center the plot with radius",
     )
+    parser.add_argument(
+        "--radial",
+        action="store_true",
+        help="radial profile",
+    )
 
     args = parser.parse_args()
     class TorqueCalculation:
@@ -523,6 +528,9 @@ def main_cbdgam_2d():
             Pressure = fields['pre'](prim)
             
             f = (Pressure / Sigma ** gamma).T
+
+        # Radial Profile
+
         else:
             f = fields[args.field](prim).T
 
@@ -596,6 +604,39 @@ def main_cbdgam_2d():
         plt.ylim([1e35, 2 * integral])
         plt.show()
         #plt.savefig(args.Outputs + "/SED_%g.png"%(chkpt["time"]/ 2 / np.pi), dpi=300, bbox_inches='tight')
+    if args.radial:
+        from scipy.interpolate import RegularGridInterpolator
+        Sigma = fields['sigma'](prim)
+        Pressure = fields['pre'](prim)
+        ni, nj = mesh.shape
+        xspace = np.linspace(mesh.x0, mesh.x1,ni)
+        yspace = np.linspace(mesh.y0, mesh.y1,nj)            
+        X, Y = np.meshgrid(xspace,yspace)
+        r_edge = 10.0
+        # y_index_edge = int(y1 / mesh.dy)
+
+        theta = np.deg2rad(90)
+        r = np.linspace(0,r_edge,2000)
+        x_line = r * np.cos(theta)
+        y_line = r * np.sin(theta)
+        xvals = X[0,:]
+        yvals = Y[:,0]
+        interp = RegularGridInterpolator((yvals, xvals), Sigma, bounds_error=False, fill_value=np.nan)
+
+        points = np.column_stack((y_line, x_line))  # Note: (y, x) order
+        radial_density = interp(points)
+
+        plt.figure(figsize=(8,6))
+        plt.plot(r,radial_density ,label=r"$\rho_1 / \rho_0$")
+        plt.plot(r,1.89e-4 * r**(-0.6), label=r"$\rho_0$")
+        plt.legend()
+        plt.xlabel('r')
+        plt.ylabel(r'$\rho$')   
+        plt.yscale('log') 
+        plt.xlim(0,r_edge)
+        plt.title(r'Radial Profile at $\theta$ = %g'%(np.rad2deg(theta)))
+
+        plt.show()
 
     if args.vmap:
             Number_of_Vectors = 15
