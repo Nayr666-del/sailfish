@@ -159,6 +159,15 @@ class Patch:
                 self.physics.gamma_law_index,
             )
             return self.wavespeeds.max()
+    
+    def wavespeeds(self):
+        with self.execution_context:
+            self.lib.cbdgam_2d_wavespeed[self.shape](
+                self.primitive1,
+                self.wavespeeds,
+                self.physics.gamma_law_index,
+            )
+            return self.wavespeeds
 
     def recompute_conserved(self):
         with self.execution_context:
@@ -431,7 +440,7 @@ class Solver(SolverBase):
         return mask.sum() ## Return and check this sum over patches. Is it multiplied by da? If not is it a bottleneck?
     
     def detect_pressure_floor(self, patch):
-        pressure = patch.primitive1[:, :, 0]
+        pressure = patch.primitive1[:, :, 3] ## should be [:, :, 3]?
         mask     = pressure <= patch.options.pressure_floor * 1.01
         return mask.sum() ## Return and check this sum over patches. Is it multiplied by da? If not is it a bottleneck?
 
