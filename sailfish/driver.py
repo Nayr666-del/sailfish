@@ -550,7 +550,7 @@ def simulate(driver):
                     solver.advance(dt)
                 else:
                     logger.warning(
-                        f"timestep dt={dt:.3e} is too small, ending simulation"
+                        f"timestep dt={dt:.3e} is too small, ending simulation. ws = {solver.maximum_wavespeed():.3e}, dx = {dx:.3e}, cfl_number = {cfl_number:.3e}"
                     )
                     import sys
                     sys.exit(0)
@@ -949,7 +949,7 @@ def main():
                 driver.model_parameters["Eccentric_Anomalies"]  = Integrated_Orbit["Eccentric_Anomalies"] 
                 # Ryan: needs density profile and the corresponding pressure profile from density.
                 # How to do this?
-                if epsilon != 0.0:
+                if (epsilon != 0.0) & (MP["shocked_buffer"]):# Ryan: if the buffer is needed.
                     from sailfish.physics.ShockedBoundary import ML_Boundaries
                     import numpy as np
                     from scipy.optimize import root_scalar

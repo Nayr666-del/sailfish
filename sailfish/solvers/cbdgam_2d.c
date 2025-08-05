@@ -449,7 +449,7 @@ PRIVATE void conserved_to_primitive(
     prim[2] = vy;
     prim[3] = pres;
 
-    // double r = sqrt(xc * xc + yc * yc + 0.04 * 0.04); // HRMAX might affect stuff
+    // double r = sqrt(xc * xc + yc * yc + 1e-12 * 1e-12); // HRMAX might affect stuff
     // double h = disk_height(mass_list, xc, yc, prim, gamma_law_index);
 
     // if (h / r > HRMAX) {

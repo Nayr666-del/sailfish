@@ -81,6 +81,8 @@ class CoolInspiral(SetupBase):
     buffer_timestep       = param(0.001, "time step for integrating the shocked profile")
     buffer_sigma_list     = param([], "List of perturbed density profile at the outer edge")
     buffer_pressure_list  = param([], "List of perturbed pressure profile at the outer edge")
+    #Toggle on or off buffer
+    shocked_buffer        = param(False,"If the time-varying buffer is enabled")
 
     # Code units
     a0 = 1.0
@@ -165,10 +167,10 @@ class CoolInspiral(SetupBase):
             sigma    = self.SS73.surface_density_profile(r_softened)
             pressure = self.SS73.surface_pressure_profile(r_softened)
 
-            primitive[0] = sigma * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+            primitive[0] = sigma * (0.0001 + 0.9999 * exp(-((2.0 / r_softened) ** 30)))
             primitive[1] = sign  * sqrt(self.GM / r_softened) * phi_hat_x
             primitive[2] = sign  * sqrt(self.GM / r_softened) * phi_hat_y
-            primitive[3] = pressure * (0.0001 + 0.9999 * exp(-((1.0 / r_softened) ** 30)))
+            primitive[3] = pressure * (0.0001 + 0.9999 * exp(-((2.0 / r_softened) ** 30)))
             
 
     def mesh(self, resolution):
@@ -183,7 +185,7 @@ class CoolInspiral(SetupBase):
         if self.is_isothermal:
             return dict(
                 eos_type=EquationOfState.LOCALLY_ISOTHERMAL,
-                mach_number=self.mach_number_3a,
+                mach_number=self.mach_number_a,
                 point_mass_function=self.point_masses,
                 buffer_is_enabled=self.buffer_is_enabled,
                 buffer_driving_rate=100.0,
@@ -371,6 +373,8 @@ class CoolInspiral(SetupBase):
         return [Interpolated_Density, Interpolated_Pressure]
     
     def buffer_terms(self,time):
+        if not self.shocked_buffer:
+            return "None"
         if self.check_if_inspiral(time) == 'Merged':
             return self.Buffer_Conditions_During_Inspiral(time)
         else:
@@ -492,7 +496,7 @@ class CoolInspiral(SetupBase):
             
 
             c1 = PointMass((m1 + m2) * (1 - self.epsilon), x, y, vx, vy, softening_length=2 * self.softening_length, sink_model=SinkModel['ACCELERATION_FREE'], sink_rate=self.sink_rate, sink_radius=2 * self.sink_radius,)
-            c2 = PointMass(0, x, y, vx, vy, softening_length=0, sink_model=SinkModel['INACTIVE'], sink_rate=0, sink_radius=0,)
+            c2 = PointMass(0.0, x, y, vx, vy, softening_length=0.0, sink_model=SinkModel['INACTIVE'], sink_rate=0.0, sink_radius=0.0,)
             return (c1,c2)
 
     def checkpoint_diagnostics(self, time):
@@ -628,8 +632,8 @@ class ReferenceState(SetupBase):
     def physics(self):
         if self.is_isothermal:
             return dict(
-                eos_type=EquationOfState.LOCALLY_ISOTHERMAL,
-                mach_number=self.mach_number_3a,
+                eos_type=EquationOfState.GLOBALLY_ISOTHERMAL,
+                mach_number=self.mach_number_a,
                 point_mass_function=self.point_masses,
                 buffer_is_enabled=self.buffer_is_enabled,
                 buffer_driving_rate=100.0,

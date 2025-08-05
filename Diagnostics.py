@@ -31,9 +31,10 @@ def load_checkpoint(filename, require_solver=None):
 
 #current time in code units as well
 
-def to_real_time(user_time,a0,M):
+def to_real_time(user_time,a0,M,merge_time):
     real_time = user_time * 2 * np.pi * (a0**3)**0.5 * cgs['G'] * cgs['msun'] * M / (cgs['c']**3)
-    return real_time
+    real_merge_time = merge_time * 2 * np.pi * (a0**3)**0.5 * cgs['G'] * cgs['msun'] * M / (cgs['c']**3)
+    return real_time - real_merge_time
 class DavidTimeseries:
     def __init__(self, Checkpoint):
         #Checkpoint = load_checkpoint(chkpt)
@@ -68,7 +69,19 @@ class DavidTimeseries:
         self.uv              = np.array([s[19] for s in ts])
         self.xray            = np.array([s[20] for s in ts])
         self.Max_temp        = np.array([s[21] for s in ts])
-        
+class NoneTimeSeries:
+    def __init__(self, Checkpoint):
+        #Checkpoint = load_checkpoint(chkpt)
+        timeseries_data = Checkpoint['timeseries']
+        max_len         = max(len(arr) for arr in timeseries_data)
+        ts              = np.array([np.pad(arr, (0, max_len - len(arr)), 'constant') for arr in timeseries_data])
+
+        self.pointmasses     = Checkpoint["point_masses"]
+        self.currenttime     = Checkpoint["time"] / 2 / np.pi 
+        self.modelparams     = Checkpoint['model_parameters'] 
+        self.time            = np.array([s[ 0] for s in ts])
+        self.mdot1           = np.array([s[ 1] for s in ts])
+        self.mdot2           = np.array([s[ 2] for s in ts])
         
 # time in code units, dt in real units
 # time * 2*np.pi is the real time
@@ -114,11 +127,15 @@ if __name__ == '__main__':
         help="Where to save the output png files",
     )
     parser.add_argument(
-        "--Real_Time",
-        "-rt",
+        "--hour",
         default=False,
         action='store_true',
-        help="Plot in physical time")
+        help="Plot in hours")
+    parser.add_argument(
+        "--day",
+        default=False,
+        action='store_true',
+        help="Plot in days")
     parser.add_argument(
         "--Disk_Momentum",
         "-jd",
@@ -185,7 +202,10 @@ if __name__ == '__main__':
 
     filename            = args.checkpoints[0]
     chkpt               = load_checkpoint(filename)
-    ts                  = DavidTimeseries(chkpt)
+    if chkpt["model_parameters"]["which_diagnostics"] == "david":
+        ts                  = DavidTimeseries(chkpt)
+    else:
+        ts = NoneTimeSeries(chkpt)
 
     try:
         Primary,Secondary   = ts.pointmasses
@@ -200,7 +220,7 @@ if __name__ == '__main__':
     CurrentTime         = ts.currenttime
     Model_Parameters    = ts.modelparams
 
-    Number_of_Orbits    = 100.
+    Number_of_Orbits    = 800.
     Final_Orbits        = ts.time[ts.time>CurrentTime-Number_of_Orbits] # final 100 orbits
     TimeBins            = np.arange(Final_Orbits[0],Final_Orbits[-1],1)
 
@@ -227,8 +247,8 @@ if __name__ == '__main__':
         plt.plot(ts.time[-len(Final_Orbits):], ts.density_floor[-len(Final_Orbits):], c = 'black', label = r'$N_\mathrm{cells}$ at density floor')     
         plt.plot(ts.time[-len(Final_Orbits):], ts.pressure_floor[-len(Final_Orbits):], c = 'black', linestyle ='dashed', label = r'$N_\mathrm{cells}$ at pressure floor')     
         plt.plot(ts.time[-len(Final_Orbits):], ts.uncounted_cells[-len(Final_Orbits):], c = 'red', label = r'$N_\mathrm{cells}$ ignored by lightcurves') 
-        plt.axhline(y = 4000000)
-        #plt.ylim([0,10])
+        # plt.axhline(y = 4000000)
+        plt.ylim([0,100000])
         
         plt.xlabel('time')
         plt.legend()
@@ -242,42 +262,54 @@ if __name__ == '__main__':
     if args.Lightcurves:
         StartTime = Model_Parameters['inspiral_start_time']
         MergeTime = Model_Parameters['gw_inspiral_time'] / (2 * np.pi) + StartTime
-        if args.Real_Time:
+        if args.hour:
             a0 = Model_Parameters['init_separation_rg']
             M = Model_Parameters['central_mass_msun']
-            Final_Orbits = to_real_time(Final_Orbits, a0, M) / 24 / 3600
-            StartTime = to_real_time(StartTime, a0, M) / 24 / 3600
-            MergeTime = to_real_time(MergeTime, a0, M) / 24 / 3600
-            CurrentTime = to_real_time(CurrentTime, a0, M) / 24 / 3600
-            Number_of_Orbits = to_real_time(Number_of_Orbits, a0, M) / 24 / 3600
-        plt.figure(figsize = (10,3))
-        plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'red', label = 'infared luminosity')
-        plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
-        plt.plot(Final_Orbits, ts.uv[-len(Final_Orbits):],   c = 'purple', label = 'uv')
-        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'xray', linewidth = 0.6) 
-        plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'bolometric luminosity', linewidth = 0.6)
-        plt.legend()
+            Final_Orbits = to_real_time(Final_Orbits, a0, M,MergeTime) / 3600
+            StartTime = to_real_time(StartTime, a0, M,MergeTime) / 3600
+            MergeTime = to_real_time(MergeTime, a0, M,MergeTime) / 3600
+            CurrentTime = to_real_time(CurrentTime, a0, M,MergeTime) / 3600
+            Number_of_Orbits = to_real_time(Number_of_Orbits, a0, M,MergeTime) / 3600
+        elif args.day:
+            a0 = Model_Parameters['init_separation_rg']
+            M = Model_Parameters['central_mass_msun']
+            Final_Orbits = to_real_time(Final_Orbits, a0, M,MergeTime) / 24 / 3600
+            StartTime = to_real_time(StartTime, a0, M,MergeTime) / 24 / 3600
+            MergeTime = to_real_time(MergeTime, a0, M,MergeTime) / 24 / 3600
+            CurrentTime = to_real_time(CurrentTime, a0, M,MergeTime) / 24 / 3600
+            Number_of_Orbits = to_real_time(Number_of_Orbits, a0, M,MergeTime) / 24 / 3600
+        plt.figure(figsize = (16,4))
+        #plt.plot(Final_Orbits, ts.infared[-len(Final_Orbits):], c = 'red', label = 'infared luminosity')
+        #plt.plot(Final_Orbits, ts.optical[-len(Final_Orbits):], c = 'blue', label = 'optical luminosity')
+        plt.plot(Final_Orbits, ts.uv[-len(Final_Orbits):],   c = 'purple', label = 'UV',linewidth = 2)
+        plt.plot(Final_Orbits, ts.xray[-len(Final_Orbits):], c = 'green', label = 'X-ray', linewidth = 2) 
+        plt.plot(Final_Orbits, ts.bolometric[-len(Final_Orbits):], c = 'black', label = 'Total Luminosity', linewidth = 2)
+        plt.legend(fontsize=16)
+        plt.tick_params(axis='x',labelsize=16)
+        plt.tick_params(axis='y',labelsize=16)
         # plt.plot(ts.time, ts.infared, c = 'red', label = 'infared luminosity')
         # plt.plot(ts.time, ts.optical, c = 'blue', label = 'optical luminosity')
-        # plt.plot(ts.time, ts.uv,   c = 'purple', label = 'uv')
-        # plt.plot(ts.time, ts.xray, c = 'green', label = 'xray', linewidth = 0.6) 
         # plt.plot(ts.time, ts.bolometric, c = 'black', label = 'bolometric luminosity', linewidth = 0.6)
         #plt.axvline(x = StartTime, linestyle = 'dashed', label ='Inspiral start', c = 'gray')
         plt.axvline(x = MergeTime, linestyle = 'dashed', label ='Merger', c = 'black')
-        if args.Real_Time:
-            plt.xlabel('time (days)')
+        if args.day:
+            plt.xlabel('time (days)',fontsize=16)
+        elif args.hour:
+            plt.xlabel('time (hours)',fontsize=16)
         else:
             plt.xlabel('time')
-        plt.ylabel('erg/s')
-        plt.title('Multiband Lightcurves')
+        plt.ylabel('erg/s',fontsize=16)
+        #plt.title('Multiband Lightcurves')
         plt.yscale('log')
-        plt.ylim([1e35, 1e48])
-        print(ts.xray)
-        #plt.xlim([180,220])
+        #plt.ylim(5e42,8e42)
+        #plt.xlim(0,10)
+        plt.ylim([1e36, 1e48])
+        #plt.xlim([-24,24])
+        plt.tight_layout()
         plt.show()
-        if args.Real_Time:
+        if args.Output:
             try:
-                savename = args.Output + "/Lightcurves_Days.%04d.png"%(CurrentTime)
+                savename = args.Output + "/Lightcurves.%04d.png"%(CurrentTime)
                 plt.savefig(savename, dpi=400, bbox_inches='tight')
             except:
                 plt.show()
@@ -375,59 +407,69 @@ if __name__ == '__main__':
 
 
     if args.Accretion:
-        try:
-            StartTime = Model_Parameters['inspiral_start_time']
-            MergeTime = Model_Parameters['gw_inspiral_time'] / (2 * np.pi) + StartTime
-        except KeyError:
-            pass
-        if CurrentTime < Number_of_Orbits:
-            Mean_Norm_Factor = np.array(np.mean(ts.mdot1+ts.mdot2))
-        else: # Using the last 100 orbits before the final as a normalization mean. Else use the entire.
-            Mean_Norm_Factor = np.array(np.mean(ts.mdot1[-len(Final_Orbits)-100:-len(Final_Orbits)]+ts.mdot2[-len(Final_Orbits)-100:-len(Final_Orbits)]))
-        plt.figure()
-        if args.Real_Time:
-            a0 = Model_Parameters['init_separation_rg']
-            M = Model_Parameters['central_mass_msun']
-            Final_Orbits = to_real_time(Final_Orbits, a0, M) / 24 / 3600
-            StartTime = to_real_time(StartTime, a0, M) / 24 / 3600
-            MergeTime = to_real_time(MergeTime, a0, M) / 24 / 3600
-            CurrentTime = to_real_time(CurrentTime, a0, M) / 24 / 3600
-            Number_of_Orbits = to_real_time(Number_of_Orbits, a0, M) / 24 / 3600
-        plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
-        #plt.plot(ts.time,(ts.mdot1+ts.mdot2)/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
+        if Model_Parameters["which_diagnostics"] == "david":
+            #inal_Orbits = ts.time
+            try:
+                StartTime = Model_Parameters['inspiral_start_time']
+                MergeTime = Model_Parameters['gw_inspiral_time'] / (2 * np.pi) + StartTime
+            except KeyError:
+                pass
+            if CurrentTime < Number_of_Orbits:
+                Mean_Norm_Factor = np.array(np.mean(ts.mdot1+ts.mdot2))
+            else: # Using the last 100 orbits before the final as a normalization mean. Else use the entire.
+                Mean_Norm_Factor = np.array(np.mean(ts.mdot1[-len(Final_Orbits)-100:-len(Final_Orbits)]+ts.mdot2[-len(Final_Orbits)-100:-len(Final_Orbits)]))
+                pass
+            plt.figure()
+            if args.day:
+                a0 = Model_Parameters['init_separation_rg']
+                M = Model_Parameters['central_mass_msun']
+                Final_Orbits = to_real_time(Final_Orbits, a0, M, MergeTime) / 24 / 3600
+                StartTime = to_real_time(StartTime, a0, M, MergeTime) / 24 / 3600
+                MergeTime = to_real_time(MergeTime, a0, M, MergeTime) / 24 / 3600
+                CurrentTime = to_real_time(CurrentTime, a0, M, MergeTime) / 24 / 3600
+                Number_of_Orbits = to_real_time(Number_of_Orbits, a0, M, MergeTime) / 24 / 3600
+            plt.plot(Final_Orbits,(ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
+            #plt.plot(ts.time,(ts.mdot1+ts.mdot2)/Mean_Norm_Factor,label='mdot',linewidth = 0.5, c = 'red')
 
-        if args.Real_Time:
-            plt.xlabel('Time (days)')
-        else:
-            plt.xlabel('Time [P]')
-        plt.ylabel(r'$\dot{M}/\langle\dot{M}_0\rangle$')
-        plt.title(r'Accretion Rate, $\alpha=%g$'%(alpha))
-        try:
-            plt.axvline(x = StartTime, linestyle = 'dashed', label ='Inspiral start', c = 'gray')
-            plt.axvline(x = MergeTime, linestyle = 'dashed', label ='Merger', c = 'black')
-        except:
-            pass
-       
-        plt.ylim([10e-6,5])
-        if CurrentTime < Number_of_Orbits:
-            plt.xlim([0,CurrentTime])
-        else:
-            plt.xlim([CurrentTime-Number_of_Orbits,CurrentTime])
-            pass
-        #AccretionRate = (ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])#/M_dot_0
-        #MeanAccretion = np.array([np.mean(AccretionRate[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))])/Mean_Norm_Factor
-        #plt.plot(Final_Orbits,MeanAccretion[-len(Final_Orbits):],linewidth = 0.5, label = 'Binned Means', c = 'black')
-        plt.legend(loc = 'upper right')
-        plt.yscale('log')
-        if args.Output is None:
-            plt.show()
-        else:
-            if args.Real_Time:
-                savename = args.Output +  "/AccretionRate_Days.%04d_alpha%g.png"%(CurrentTime,alpha)
-                plt.savefig(savename, dpi=400)
+            if args.day:
+                plt.xlabel('Time (days)')
             else:
-                savename = args.Output +  "/AccretionRate.%04d_alpha%g.png"%(CurrentTime,alpha)
-                plt.savefig(savename, dpi=400)
+                plt.xlabel('Time [P]')
+            plt.ylabel(r'$\dot{M}/\langle\dot{M}_0\rangle$')
+            plt.title(r'Accretion Rate, $\alpha=%g$'%(alpha))
+            try:
+                plt.axvline(x = StartTime, linestyle = 'dashed', label ='Inspiral start', c = 'gray')
+                plt.axvline(x = MergeTime, linestyle = 'dashed', label ='Merger', c = 'black')
+            except:
+                pass
+        
+            plt.ylim([1e-9,5])
+            if CurrentTime < Number_of_Orbits:
+                plt.xlim([0,CurrentTime])
+            else:
+                plt.xlim([CurrentTime-Number_of_Orbits,CurrentTime])
+                pass
+            #AccretionRate = (ts.mdot1[-len(Final_Orbits):]+ts.mdot2[-len(Final_Orbits):])#/M_dot_0
+            #MeanAccretion = np.array([np.mean(AccretionRate[CumulativeTimeBin[i-1]:CumulativeTimeBin[i]]) for i in range(1,len(TimeBins))])/Mean_Norm_Factor
+            #plt.plot(Final_Orbits,MeanAccretion[-len(Final_Orbits):],linewidth = 0.5, label = 'Binned Means', c = 'black')
+            plt.legend(loc = 'upper right')
+            plt.yscale('log')
+            if args.Output is None:
+                plt.show()
+            else:
+                if args.Real_Time:
+                    savename = args.Output +  "/AccretionRate_Days.%04d_alpha%g.png"%(CurrentTime,alpha)
+                    plt.savefig(savename, dpi=400)
+                else:
+                    savename = args.Output +  "/AccretionRate.%04d_alpha%g.png"%(CurrentTime,alpha)
+                    plt.savefig(savename, dpi=400)
+        else:
+            # print(ts.mdot2)
+            Mean_Norm_Factor = np.array(np.mean(ts.mdot1+ts.mdot2))
+            plt.plot(ts.time,(ts.mdot1 + ts.mdot2) / Mean_Norm_Factor, label='mdot', linewidth=0.5, c = 'red')
+            plt.legend(loc = 'upper right')
+            plt.yscale('log')
+            plt.show()
 
 
     if args.Orbital_Elements:

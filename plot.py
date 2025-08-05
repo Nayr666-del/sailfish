@@ -13,8 +13,11 @@ class FixNumpyCoreUnpickler(pk.Unpickler):
             module = module.replace("numpy._core", "numpy.core")
         return super().find_class(module, name)
 
-
-
+from cooling import cgs
+def to_real_time(user_time,a0,M,merge_time):
+    real_time = user_time * 2 * np.pi * (a0**3)**0.5 * cgs['G'] * cgs['msun'] * M / (cgs['c']**3)
+    real_merge_time = merge_time * 2 * np.pi * (a0**3)**0.5 * cgs['G'] * cgs['msun'] * M / (cgs['c']**3)
+    return real_time - real_merge_time
 def load_checkpoint(filename, require_solver=None):
     with open(filename, "rb") as f:
         chkpt = FixNumpyCoreUnpickler(f).load()
@@ -46,6 +49,7 @@ def PrecomputeLum(Band,dx,length_scale,pc):
 def InterpolateLum(Band,dx,length_scale,pc,T): #T is an array of maps
     Precomputed, Range, Diff = PrecomputeLum(Band,dx,length_scale,pc)
     lowlogT = np.log10(Range[0])
+    print(lowlogT)
     Tarray = np.maximum(T,10**lowlogT)
     
     Progress = (np.log10(Tarray) - lowlogT) / Diff 
@@ -99,7 +103,7 @@ def main_cbdgam_2d():
         "sigma": lambda p: p[:, :, 0],
         "vx": lambda p: p[:, :, 1],
         "vy": lambda p: p[:, :, 2],
-        "pre": lambda p: p[:, :, 3],
+        "pre": lambda p: p[:, :, 3], # Ryan: take note
         "torque": None,
         "div-v": None
     }
@@ -268,7 +272,7 @@ def main_cbdgam_2d():
         import cooling
         from cooling import gamma_law_index, EffectiveTemperature, cgs
 
-        gamma = gamma_law_index(chkpt['model_parameters']['beta'], chkpt['model_parameters']['gamma_law_index_gas'])
+        gamma = 5.0/3.0 # gamma_law_index(chkpt['model_parameters']['beta'], chkpt['model_parameters']['gamma_law_index_gas'])
         try:
             length_scale_pc = chkpt['model_parameters']['length_scale_pc']
         except KeyError as e:
@@ -402,7 +406,23 @@ def main_cbdgam_2d():
  
              # Mach    = ROmega / cs
              # f       = Mach.T
-
+        elif args.field == 'cs':
+            Sigma    = fields["sigma"](prim)
+            Pressure = fields["pre"](prim)
+            cs     = (gamma * Pressure / Sigma)**0.5
+            f = cs.T
+        elif args.field == 'max_wavespeed':
+            Sigma  = fields["sigma"](prim) 
+            Pressure = fields["pre"](prim)
+            cs = (gamma * Pressure / Sigma) ** 0.5
+            vx = fields["vx"](prim)
+            vy = fields["vy"](prim)
+            speed_1 = np.abs(vx + cs)
+            speed_2 = np.abs(vx - cs)
+            speed_3 = np.abs(vy + cs)
+            speed_4 = np.abs(vy - cs)
+            max_wavespeed = np.maximum.reduce([speed_1, speed_2, speed_3, speed_4])
+            f = max_wavespeed.T
         elif args.field == 'h':
             Sigma    = fields["sigma"](prim)
             Pressure = fields["pre"](prim)
@@ -417,13 +437,14 @@ def main_cbdgam_2d():
             xprim, yprim = primary.position_x, primary.position_y
             xsec, ysec   = secondary.position_x, secondary.position_y
             
-            R_1     = np.sqrt((X-xprim)**2 + (Y-yprim)**2)
-            R_2     = np.sqrt((X-xsec)**2  + (Y-ysec)**2)
-            Omega_1 = np.sqrt(0.5 / (R_1**3 + 1e-12)) #Assuming a Keplerian disk
-            Omega_2 = np.sqrt(0.5 / (R_2**3 + 1e-12))  #Assuming a Keplerian disk
+            R_1     = np.sqrt((X-xprim)**2 + (Y-yprim)**2 + 1e-12)
+            R_2     = np.sqrt((X-xsec)**2  + (Y-ysec)**2 + 1e-12)
+            R       = np.sqrt(X ** 2 + Y ** 2 + 0.04)
+            Omega_1 = np.sqrt(0.5 / (R_1**3)) #Assuming a Keplerian disk
+            Omega_2 = np.sqrt(0.5 / (R_2**3))  #Assuming a Keplerian disk
                
-            ROmega  = np.sqrt((R_1 * Omega_1)**2 + (R_2 * Omega_2)**2) #Assuming a Keplerian disk
-             
+            Omega  = np.sqrt((Omega_1)**2 + (Omega_2)**2) #Assuming a Keplerian disk
+            ROmega = R * Omega
             h    = cs / ROmega
             f       = h.T
         elif args.field == 'H':
@@ -548,7 +569,8 @@ def main_cbdgam_2d():
             cmap=args.cmap,
             extent=extent,
         )
-        fig.colorbar(cm)
+        cbar = fig.colorbar(cm)
+        cbar.set_label(r'$\Sigma$',fontsize=16)
         ax.tick_params(axis='x', labelsize=16)
         ax.tick_params(axis='y', labelsize=16)
 
@@ -558,6 +580,10 @@ def main_cbdgam_2d():
         fig.subplots_adjust(
         left=0.05, right=0.95, bottom=0.05, top=0.95, hspace=0, wspace=0
         )
+
+        ax.set_xlabel(r'$a_0$',fontsize=16)
+        ax.set_ylabel(r'$a_0$',fontsize=16)
+        fig.tight_layout()
 
     if args.SED:
         kb_code    = cgs['kb'] / (SS73._mass * SS73._length**2 / SS73._time**2)
@@ -626,15 +652,27 @@ def main_cbdgam_2d():
         points = np.column_stack((y_line, x_line))  # Note: (y, x) order
         radial_density = interp(points)
 
+        # Ryan: Testing the analytic profile
+        from sailfish.physics.ShockedBoundary import ML_Boundaries
+        analytic_profile = []
+        time_passed = (CurrentTime - chkpt["model_parameters"]["kick_start_time"] ) * np.pi * 2
+        if time_passed < 0:
+            time_passed = 0
+        for rs in r:
+            ML = ML_Boundaries(rs,0.05,[time_passed ])
+            analytic_profile.append(ML.shocked_conditions)
+
         plt.figure(figsize=(8,6))
-        plt.plot(r,radial_density ,label=r"$\rho_1 / \rho_0$")
-        plt.plot(r,1.89e-4 * r**(-0.6), label=r"$\rho_0$")
+        plt.plot(r,radial_density ,label=r"$\rho_1$")
+        #plt.plot(r,1.89e-4 * r**(-0.6), label=r"$\rho_0$")
+        plt.plot(r,analytic_profile,label=r"$\rho_p$")
         plt.legend()
         plt.xlabel('r')
         plt.ylabel(r'$\rho$')   
-        # plt.yscale('log')
-        # plt.xscale('log') 
+        #plt.yscale('log')
+        #plt.xscale('log') 
         plt.xlim(0,r_edge)
+        plt.ylim(0,2)
         plt.title(r'Radial Profile at $\theta$ = %g'%(np.rad2deg(theta)))
 
         plt.show()
@@ -705,7 +743,7 @@ def main_cbdgam_2d():
         primarycenter   = (primary.position_x, primary.position_y)
         secondarycenter = (secondary.position_x, secondary.position_y)
         radius          = primary.sink_radius         # Radius of the circle
-        print(primary.sink_radius)
+        # print(primary.sink_radius)
         primarysink   = Circle(primarycenter, radius, color='grey', fill=True, alpha=0.8)
         secondarysink = Circle(secondarycenter, radius, color='grey', fill=True, alpha=0.8)
         ax.add_patch(primarysink)
@@ -745,10 +783,16 @@ configure_matplotlib()
 if __name__ == "__main__":
     for arg in sys.argv:
         if arg.endswith(".pk"):
-            chkpt = load_checkpoint(arg)
-            
             import numpy as np
-            print('Time',chkpt['time']/2/np.pi)
+            chkpt = load_checkpoint(arg)
+            # Model_Parameters = chkpt["model_parameters"]
+            # a0 = Model_Parameters["init_separation_rg"]
+            # M=Model_Parameters["central_mass_msun"]
+            # StartTime = Model_Parameters['inspiral_start_time']
+            # MergeTime = Model_Parameters['gw_inspiral_time'] / (2 * np.pi) + StartTime
+
+            # time_merger = to_real_time(chkpt['time']/2/np.pi,a0,M,MergeTime) / 24 / 3600
+            # print('Time',time_merger)
             # print(chkpt.keys())
             # print(chkpt['mesh'])
             
@@ -756,5 +800,7 @@ if __name__ == "__main__":
                 print("plotting for cbdgam_2d solver")
                 exit(main_cbdgam_2d())
             else:
-                print(f"Unknown solver {chkpt['solver']}")
+                exit(main_cbdgam_2d())
+            # else:
+            #     print(f"Unknown solver {chkpt['solver']}")
         
